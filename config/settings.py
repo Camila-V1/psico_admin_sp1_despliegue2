@@ -138,6 +138,9 @@ DATABASES = {
     )
 }
 
+# CRÍTICO: django-tenants requiere este ENGINE específico
+DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
+
 # Configurar el backend específico para django-tenants
 DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
 

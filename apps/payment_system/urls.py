@@ -7,6 +7,11 @@ from .views import (
     PaymentStatusView,
     GetStripePublicKeyView
 )
+from .demo_views import (
+    simulate_payment_success,
+    simulate_payment_failed,
+    demo_payment_cards
+)
 
 urlpatterns = [
     # Crear sesión de pago
@@ -20,4 +25,9 @@ urlpatterns = [
     
     # Obtener clave pública de Stripe
     path('stripe-public-key/', GetStripePublicKeyView.as_view(), name='stripe-public-key'),
+    
+    # === ENDPOINTS DE DEMOSTRACIÓN (solo para testing) ===
+    path('demo/simulate-success/', simulate_payment_success, name='demo-simulate-success'),
+    path('demo/simulate-failed/', simulate_payment_failed, name='demo-simulate-failed'),
+    path('demo/test-cards/', demo_payment_cards, name='demo-test-cards'),
 ]

@@ -3,10 +3,8 @@
 set -o errexit
 
 echo "🔧 Instalando dependencias..."
+pip install --upgrade pip
 pip install -r requirements.txt
-
-echo "📦 Instalando gunicorn..."
-pip install gunicorn
 
 echo "🗄️ Aplicando migraciones al esquema público..."
 python manage.py migrate_schemas --shared
