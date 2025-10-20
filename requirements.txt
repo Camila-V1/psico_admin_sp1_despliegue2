@@ -2,6 +2,7 @@ asgiref==3.9.1
 attrs==25.3.0
 autobahn==24.4.2
 Automat==25.4.16
+boto3==1.35.0
 cffi==2.0.0
 channels==4.3.1
 channels_redis==4.3.0
@@ -11,9 +12,11 @@ daphne==4.2.1
 dj-database-url==3.0.1
 Django==5.2.6
 django-cors-headers==4.8.0
+django-storages==1.14.4
 djangorestframework==3.16.1
 Faker==37.6.0
 gunicorn==23.0.0
+django-tenants==3.7.0
 hyperlink==21.0.0
 idna==3.10
 incremental==24.7.2

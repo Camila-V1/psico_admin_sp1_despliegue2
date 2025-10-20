@@ -30,8 +30,12 @@ find_*.py
 tenant_debug.py
 configure_hosts.txt
 GUIA_*.py
+
+# Documentación (mantener README y guías de deploy)
 *.md
 !README.md
+!DEPLOY_RENDER.md
+!BACKUPS_S3_README.md
 
 # Archivos de VSCode / PyCharm
 .vscode/

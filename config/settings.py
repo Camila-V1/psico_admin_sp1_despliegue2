@@ -27,7 +27,14 @@ SECRET_KEY = config("SECRET_KEY")
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config("DEBUG", default=False, cast=bool)
 
-ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1,bienestar.localhost,mindcare.localhost,*.localhost,*.127.0.0.1.nip.io", cast=Csv())
+# RENDER: Detectar si estamos en producción
+RENDER = config("RENDER", default=False, cast=bool)
+
+if RENDER:
+    # En Render, aceptar cualquier subdominio .onrender.com
+    ALLOWED_HOSTS = ['*']  # Render maneja el routing interno
+else:
+    ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1,bienestar.localhost,mindcare.localhost,*.localhost,*.127.0.0.1.nip.io", cast=Csv())
 
 # Application definition
 
@@ -50,7 +57,6 @@ SHARED_APPS = (
     
     'apps.users',  # Modelo de usuario personalizado debe estar en SHARED_APPS
     'apps.authentication',  # ⚠️ CRÍTICO: Para que /api/auth/ funcione en público
-    'apps.payment_system',  # ⚠️ CRÍTICO: Para webhooks de Stripe en público
     'rest_framework',       # ⚠️ CRÍTICO: Para que funcione api-auth
     'rest_framework.authtoken',  # ⚠️ CRÍTICO: Para tokens en público
 )
@@ -87,7 +93,7 @@ INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in S
 MIDDLEWARE = [
     'django_tenants.middleware.main.TenantMainMiddleware',  # DEBE ser el primero
     'apps.auditlog.local.RequestLocalStorageMiddleware',  # Capturar request para logs
-   'fix_tenant_middleware.FixTenantURLConfMiddleware',  # ❌ DESHABILITADO: Interfiere con django-tenants
+    # 'fix_tenant_middleware.FixTenantURLConfMiddleware',  # ❌ DESHABILITADO: Interfiere con django-tenants
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -190,6 +196,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 MEDIA_URL = 'media/'
 MEDIA_ROOT = BASE_DIR / 'media'
 
+# WhiteNoise para servir archivos estáticos en producción
 STORAGES = {
     "default": {
         "BACKEND": "django.core.files.storage.FileSystemStorage",
@@ -385,4 +392,22 @@ LOGGING = {
             'propagate': False,
         },
     },
+}
+
+# ---------------------------------------------------------------
+# CONFIGURACIÓN DE AWS S3 PARA BACKUPS EN LA NUBE
+# ---------------------------------------------------------------
+AWS_ACCESS_KEY_ID = config("AWS_ACCESS_KEY_ID", default="")
+AWS_SECRET_ACCESS_KEY = config("AWS_SECRET_ACCESS_KEY", default="")
+AWS_STORAGE_BUCKET_NAME = config("AWS_STORAGE_BUCKET_NAME", default="psico-backups-2025")
+AWS_S3_REGION_NAME = config("AWS_S3_REGION_NAME", default="us-east-1")
+
+# URL de acceso a S3
+AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com'
+
+# Configuración adicional de S3
+AWS_S3_FILE_OVERWRITE = False  # No sobrescribir archivos con el mismo nombre
+AWS_DEFAULT_ACL = 'private'  # Archivos privados por defecto
+AWS_S3_OBJECT_PARAMETERS = {
+    'CacheControl': 'max-age=86400',  # Cache de 1 día
 }

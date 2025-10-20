@@ -14,7 +14,9 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status, permissions
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.decorators import api_view, permission_classes
 from apps.clinic_admin.permissions import IsClinicAdmin
+from .s3_storage import S3BackupStorage
 import logging
 
 # Cambiar para usar el logger de 'apps' que va a la base de datos
@@ -24,24 +26,71 @@ class CreateBackupAndDownloadView(APIView):
     permission_classes = [permissions.IsAuthenticated, IsClinicAdmin]
 
     def post(self, request, *args, **kwargs):
-        # 🔽 EJEMPLO DE REGISTRO
+        """
+        Crea un backup y lo sube a S3.
+        Query params:
+        - download=true: descarga el backup localmente
+        - cloud_only=true: solo sube a S3, no descarga
+        """
         logger.info(f"Usuario '{request.user.email}' solicitó crear un backup.")
+        
+        # Parámetros de la request
+        should_download = request.query_params.get('download', 'false').lower() == 'true'
+        cloud_only = request.query_params.get('cloud_only', 'false').lower() == 'true'
+        
         try:
             logger.info("Intentando crear backup con pg_dump...")
-            return self._create_backup_with_pg_dump(request)
+            backup_data = self._create_backup_with_pg_dump_bytes(request)
+            
+            # Subir a S3
+            s3_storage = S3BackupStorage()
+            schema_name = request.tenant.schema_name
+            timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H%M%S')
+            filename = f"backup-sql-{schema_name}-{timestamp}.sql"
+            
+            result = s3_storage.upload_backup(
+                file_content=backup_data,
+                filename=filename,
+                folder=f"backups/{schema_name}"
+            )
+            
+            if result['success']:
+                logger.info(f"Backup subido exitosamente a S3: {result['s3_key']}")
+                
+                # Si solo queremos subir a la nube, devolver info
+                if cloud_only or not should_download:
+                    return Response({
+                        'message': 'Backup creado y subido a S3 exitosamente',
+                        'backup_info': {
+                            'filename': result['filename'],
+                            's3_key': result['s3_key'],
+                            'size': result['size'],
+                            'bucket': result['bucket'],
+                            'url': result['url']
+                        }
+                    }, status=status.HTTP_200_OK)
+                
+                # Si queremos descargar, devolver el archivo
+                response = HttpResponse(backup_data, content_type='application/sql')
+                response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                response['X-S3-Key'] = result['s3_key']  # Header personalizado con la ubicación en S3
+                return response
+            else:
+                logger.error(f"Error al subir backup a S3: {result.get('error')}")
+                return Response({
+                    'error': 'Error al subir backup a S3',
+                    'details': result.get('error')
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
         except Exception as e:
-            # 🔽 EJEMPLO DE REGISTRO DE ADVERTENCIA
             logger.warning(f"pg_dump falló. Usando fallback de Django. Error: {e}")
             return self._create_backup_with_django(request)
 
-    def _create_backup_with_pg_dump(self, request):
-        """Genera un backup en formato .sql usando la herramienta pg_dump."""
+    def _create_backup_with_pg_dump_bytes(self, request):
+        """Genera un backup en formato .sql usando pg_dump y devuelve bytes."""
         schema_name = request.tenant.schema_name
         db_settings = settings.DATABASES['default']
-        timestamp = datetime.datetime.now().strftime('%Y-%m-%d-%H%M%S')
-        filename = f"backup-sql-{schema_name}-{timestamp}.sql"
 
-        # --- CORRECCIÓN 1: Usar '127.0.0.1' en lugar de db_settings['HOST'] ---
         command = [
             'pg_dump', '--dbname', db_settings['NAME'], '--host', '127.0.0.1',
             '--port', str(db_settings['PORT']), '--username', db_settings['USER'],
@@ -56,12 +105,8 @@ class CreateBackupAndDownloadView(APIView):
             logger.error(f"Error en pg_dump: {stderr.decode()}")
             raise subprocess.CalledProcessError(process.returncode, command, stderr=stderr)
 
-        # 🔽 EJEMPLO DE REGISTRO DE ÉXITO
-        logger.info(f"Backup SQL creado exitosamente para el schema '{request.tenant.schema_name}'.")
-        
-        response = HttpResponse(stdout, content_type='application/sql')
-        response['Content-Disposition'] = f'attachment; filename="{filename}"'
-        return response
+        logger.info(f"Backup SQL creado exitosamente para el schema '{schema_name}'.")
+        return stdout
 
     def _create_backup_with_django(self, request):
         """Método de fallback que usa 'dumpdata' de Django para crear un backup .json."""
@@ -205,3 +250,7 @@ class RestoreBackupFromFileView(APIView):
         except Exception as e:
             logger.error(f"Error en limpieza segura de datos: {e}")
             raise
+
+# =========================================================================
+#  NUEVAS VISTAS PARA GESTI�N DE BACKUPS EN S3
+# =========================================================================
