@@ -22,36 +22,44 @@ django.setup()
 from apps.tenants.models import Clinic, Domain
 
 # Crear Bienestar si no existe
-if not Clinic.objects.filter(schema_name='bienestar').exists():
-    bienestar = Clinic.objects.create(
-        schema_name='bienestar',
-        name='Clínica Bienestar'
-    )
-    Domain.objects.create(
-        domain='bienestar.psico-admin.onrender.com',
-        tenant=bienestar,
-        is_primary=True
-    )
+bienestar, created = Clinic.objects.get_or_create(
+    schema_name='bienestar',
+    defaults={'name': 'Clínica Bienestar'}
+)
+if created:
     print('✅ Clínica Bienestar creada')
 else:
     print('⚠️ Clínica Bienestar ya existe')
 
+# Asegurar que el dominio existe y está correcto
+Domain.objects.update_or_create(
+    tenant=bienestar,
+    defaults={
+        'domain': 'bienestar.psico-admin.onrender.com',
+        'is_primary': True
+    }
+)
+
 # Crear Mindcare si no existe
-if not Clinic.objects.filter(schema_name='mindcare').exists():
-    mindcare = Clinic.objects.create(
-        schema_name='mindcare',
-        name='Clínica Mindcare'
-    )
-    Domain.objects.create(
-        domain='mindcare.psico-admin.onrender.com',
-        tenant=mindcare,
-        is_primary=True
-    )
+mindcare, created = Clinic.objects.get_or_create(
+    schema_name='mindcare',
+    defaults={'name': 'Clínica Mindcare'}
+)
+if created:
     print('✅ Clínica Mindcare creada')
 else:
     print('⚠️ Clínica Mindcare ya existe')
 
-print('🎉 Clínicas configuradas')
+# Asegurar que el dominio existe y está correcto
+Domain.objects.update_or_create(
+    tenant=mindcare,
+    defaults={
+        'domain': 'mindcare.psico-admin.onrender.com',
+        'is_primary': True
+    }
+)
+
+print('🎉 Clínicas y dominios configurados correctamente')
 "
 
 echo "📊 Aplicando migraciones a los tenants..."
