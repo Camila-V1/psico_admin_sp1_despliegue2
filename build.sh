@@ -35,7 +35,7 @@ else:
 Domain.objects.update_or_create(
     tenant=bienestar,
     defaults={
-        'domain': 'bienestar.psico-admin.onrender.com',
+        'domain': 'bienestar-psico.duckdns.org',
         'is_primary': True
     }
 )
@@ -54,7 +54,7 @@ else:
 Domain.objects.update_or_create(
     tenant=mindcare,
     defaults={
-        'domain': 'mindcare.psico-admin.onrender.com',
+        'domain': 'mindcare-psico.duckdns.org',
         'is_primary': True
     }
 )
