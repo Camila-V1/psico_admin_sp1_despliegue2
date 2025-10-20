@@ -13,6 +13,54 @@ echo "📁 Recolectando archivos estáticos..."
 python manage.py collectstatic --no-input
 
 echo "🏥 Creando clínicas de demostración..."
-python manage.py setup_demo_tenants || echo "⚠️ Clínicas ya existen o hubo error"
+python -c "
+import os
+import django
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+django.setup()
+
+from apps.tenants.models import Clinic, Domain
+from django.utils import timezone
+from datetime import timedelta
+
+# Crear Bienestar si no existe
+if not Clinic.objects.filter(schema_name='bienestar').exists():
+    bienestar = Clinic.objects.create(
+        schema_name='bienestar',
+        name='Clínica Bienestar',
+        paid_until=timezone.now().date() + timedelta(days=365),
+        on_trial=False
+    )
+    Domain.objects.create(
+        domain='bienestar.psico-admin.onrender.com',
+        tenant=bienestar,
+        is_primary=True
+    )
+    print('✅ Clínica Bienestar creada')
+else:
+    print('⚠️ Clínica Bienestar ya existe')
+
+# Crear Mindcare si no existe
+if not Clinic.objects.filter(schema_name='mindcare').exists():
+    mindcare = Clinic.objects.create(
+        schema_name='mindcare',
+        name='Clínica Mindcare',
+        paid_until=timezone.now().date() + timedelta(days=365),
+        on_trial=False
+    )
+    Domain.objects.create(
+        domain='mindcare.psico-admin.onrender.com',
+        tenant=mindcare,
+        is_primary=True
+    )
+    print('✅ Clínica Mindcare creada')
+else:
+    print('⚠️ Clínica Mindcare ya existe')
+
+print('🎉 Clínicas configuradas')
+"
+
+echo "📊 Aplicando migraciones a los tenants..."
+python manage.py migrate_schemas || echo "⚠️ Error en migraciones de tenants"
 
 echo "✅ Build completado!"
