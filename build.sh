@@ -20,16 +20,12 @@ os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 django.setup()
 
 from apps.tenants.models import Clinic, Domain
-from django.utils import timezone
-from datetime import timedelta
 
 # Crear Bienestar si no existe
 if not Clinic.objects.filter(schema_name='bienestar').exists():
     bienestar = Clinic.objects.create(
         schema_name='bienestar',
-        name='Clínica Bienestar',
-        paid_until=timezone.now().date() + timedelta(days=365),
-        on_trial=False
+        name='Clínica Bienestar'
     )
     Domain.objects.create(
         domain='bienestar.psico-admin.onrender.com',
@@ -44,9 +40,7 @@ else:
 if not Clinic.objects.filter(schema_name='mindcare').exists():
     mindcare = Clinic.objects.create(
         schema_name='mindcare',
-        name='Clínica Mindcare',
-        paid_until=timezone.now().date() + timedelta(days=365),
-        on_trial=False
+        name='Clínica Mindcare'
     )
     Domain.objects.create(
         domain='mindcare.psico-admin.onrender.com',
