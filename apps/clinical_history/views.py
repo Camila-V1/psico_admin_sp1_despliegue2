@@ -1,10 +1,13 @@
 # apps/clinical_history/views.py
 
 import logging
+import os
 from rest_framework import viewsets, permissions, status, generics
 from rest_framework.response import Response
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
+from django.http import FileResponse, Http404
+from django.conf import settings
 from .models import SessionNote, ClinicalDocument, ClinicalHistory  # <-- IMPORTA ClinicalHistory
 from .serializers import SessionNoteSerializer, ClinicalDocumentSerializer, PsychologistPatientSerializer, ClinicalHistorySerializer  # <-- IMPORTA ClinicalHistorySerializer
 from apps.appointments.models import Appointment
@@ -219,3 +222,38 @@ class ClinicalHistoryDetailView(generics.RetrieveUpdateAPIView):
         logger.debug(f"   Valores: {serializer.validated_data}")
         serializer.save(last_updated_by=self.request.user)
         logger.info(f"✅ [ClinicalHistory] Historia clínica actualizada exitosamente")
+
+
+class DownloadDocumentView(generics.RetrieveAPIView):
+    """
+    Vista para descargar un documento clínico de forma segura.
+    Solo el paciente dueño o el psicólogo que subió el documento puede descargarlo.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+    queryset = ClinicalDocument.objects.all()
+    lookup_field = 'pk'
+
+    def retrieve(self, request, *args, **kwargs):
+        document = self.get_object()
+        user = request.user
+
+        # Verificar permisos: el paciente dueño o el profesional que lo subió
+        if user.id != document.patient.id and user.id != document.uploaded_by.id:
+            logger.warning(f"❌ [Download] Usuario {user.id} intentó descargar documento {document.id} sin permiso")
+            return Response(
+                {"error": "No tienes permiso para descargar este documento."},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # Obtener la ruta completa del archivo
+        file_path = document.file.path
+
+        if not os.path.exists(file_path):
+            logger.error(f"❌ [Download] Archivo no encontrado: {file_path}")
+            raise Http404("Archivo no encontrado en el servidor.")
+
+        # Abrir y retornar el archivo
+        logger.info(f"✅ [Download] Usuario {user.id} descargando documento {document.id}: {document.file.name}")
+        response = FileResponse(open(file_path, 'rb'), content_type='application/octet-stream')
+        response['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
+        return response
