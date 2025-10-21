@@ -381,31 +381,22 @@ def public_clinic_list(request):
     No requiere autenticación.
     """
     try:
-        clinics = Clinic.objects.exclude(schema_name='public').values(
-            'id', 'name', 'schema_name', 'description', 'is_active'
-        )
+        # Obtener clínicas activas (excluyendo el schema público)
+        clinics = Clinic.objects.filter(is_active=True).exclude(schema_name='public')
         
-        # Convertir QuerySet a lista y agregar información de dominio
         clinics_data = []
         for clinic in clinics:
-            if clinic['is_active']:
-                # Obtener el dominio principal de la clínica
-                try:
-                    domain = Domain.objects.filter(
-                        tenant_id=clinic['id'],
-                        is_primary=True
-                    ).first()
-                    clinic_data = {
-                        'id': clinic['id'],
-                        'name': clinic['name'],
-                        'schema_name': clinic['schema_name'],
-                        'description': clinic['description'] or '',
-                        'domain': domain.domain if domain else None
-                    }
-                    clinics_data.append(clinic_data)
-                except Exception as e:
-                    logger.warning(f"Error obteniendo dominio para clínica {clinic['id']}: {str(e)}")
-                    continue
+            # Obtener el dominio principal
+            domain = Domain.objects.filter(tenant=clinic, is_primary=True).first()
+            
+            clinic_data = {
+                'id': clinic.id,
+                'name': clinic.name,
+                'schema_name': clinic.schema_name,
+                'description': clinic.description or '',
+                'domain': domain.domain if domain else None
+            }
+            clinics_data.append(clinic_data)
         
         return Response({
             'count': len(clinics_data),
