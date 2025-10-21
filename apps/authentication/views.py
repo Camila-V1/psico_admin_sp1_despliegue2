@@ -60,8 +60,6 @@ def login_user(request):
     logger.info(f"🔍 LOGIN REQUEST DEBUG:")
     logger.info(f"   Content-Type: {request.content_type}")
     logger.info(f"   request.data: {request.data}")
-    logger.info(f"   request.POST: {request.POST}")
-    logger.info(f"   request.body: {request.body[:200] if request.body else 'Empty'}")
     
     serializer = UserLoginSerializer(data=request.data, context={'request': request})
     if serializer.is_valid():
