@@ -54,6 +54,15 @@ def register_user(request):
 @authentication_classes([])
 @permission_classes([permissions.AllowAny])
 def login_user(request):
+    # 🔍 DEBUG: Log de lo que llega del frontend
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"🔍 LOGIN REQUEST DEBUG:")
+    logger.info(f"   Content-Type: {request.content_type}")
+    logger.info(f"   request.data: {request.data}")
+    logger.info(f"   request.POST: {request.POST}")
+    logger.info(f"   request.body: {request.body[:200] if request.body else 'Empty'}")
+    
     serializer = UserLoginSerializer(data=request.data, context={'request': request})
     if serializer.is_valid():
         user = serializer.validated_data['user']
@@ -95,6 +104,9 @@ def login_user(request):
             'token': token.key
         }, status=status.HTTP_200_OK)
         
+    # 🔍 DEBUG: Si la validación falla, logueamos los errores
+    logger.error(f"❌ VALIDACIÓN FALLÓ:")
+    logger.error(f"   Errores del serializer: {serializer.errors}")
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 # ... (el resto de las vistas no cambian) ...
