@@ -370,3 +370,51 @@ def check_subdomain_availability(request):
         {'available': False, 'errors': serializer.errors}, 
         status=status.HTTP_400_BAD_REQUEST
     )
+
+
+@api_view(['GET'])
+@permission_classes([])  # ⭐ Sin autenticación requerida
+def public_clinic_list(request):
+    """
+    Vista pública para listar todas las clínicas disponibles.
+    Usada por la app móvil para el selector de clínicas.
+    No requiere autenticación.
+    """
+    try:
+        clinics = Clinic.objects.exclude(schema_name='public').values(
+            'id', 'name', 'schema_name', 'description', 'is_active'
+        )
+        
+        # Convertir QuerySet a lista y agregar información de dominio
+        clinics_data = []
+        for clinic in clinics:
+            if clinic['is_active']:
+                # Obtener el dominio principal de la clínica
+                try:
+                    domain = Domain.objects.filter(
+                        tenant_id=clinic['id'],
+                        is_primary=True
+                    ).first()
+                    clinic_data = {
+                        'id': clinic['id'],
+                        'name': clinic['name'],
+                        'schema_name': clinic['schema_name'],
+                        'description': clinic['description'] or '',
+                        'domain': domain.domain if domain else None
+                    }
+                    clinics_data.append(clinic_data)
+                except Exception as e:
+                    logger.warning(f"Error obteniendo dominio para clínica {clinic['id']}: {str(e)}")
+                    continue
+        
+        return Response({
+            'count': len(clinics_data),
+            'results': clinics_data
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.error(f"Error listando clínicas públicas: {str(e)}")
+        return Response(
+            {'error': 'Error al obtener lista de clínicas'}, 
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
