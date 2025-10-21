@@ -3,6 +3,7 @@
 from django.db import models
 from django.conf import settings
 from apps.appointments.models import Appointment
+from .storage import ClinicalDocumentS3Storage
 
 class SessionNote(models.Model):
     """
@@ -50,8 +51,11 @@ class ClinicalDocument(models.Model):
         limit_choices_to={'user_type': 'professional'}
     )
     
-    # El archivo en sí
-    file = models.FileField(upload_to='clinical_documents/%Y/%m/%d/')
+    # El archivo en S3
+    file = models.FileField(
+        upload_to='clinical_documents/%Y/%m/%d/',
+        storage=ClinicalDocumentS3Storage()
+    )
     
     description = models.CharField(max_length=255, help_text="Descripción o título del documento.")
     uploaded_at = models.DateTimeField(auto_now_add=True)

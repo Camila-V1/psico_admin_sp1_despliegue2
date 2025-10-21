@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger('apps')
 
 class S3BackupStorage:
-    """Clase para gestionar backups en AWS S3"""
+    """Clase para gestionar backups Y ARCHIVOS MULTIMEDIA en AWS S3"""
     
     def __init__(self):
         self.bucket_name = settings.AWS_STORAGE_BUCKET_NAME
@@ -22,17 +22,87 @@ class S3BackupStorage:
                 aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
                 region_name=self.region
             )
-            logger.info(f"Cliente S3 inicializado correctamente para bucket: {self.bucket_name}")
+            logger.info(f"✅ Cliente S3 inicializado correctamente para bucket: {self.bucket_name}")
         except NoCredentialsError:
-            logger.error("Credenciales de AWS no encontradas")
+            logger.error("❌ Credenciales de AWS no encontradas")
             raise
         except Exception as e:
-            logger.error(f"Error al inicializar cliente S3: {e}")
+            logger.error(f"❌ Error al inicializar cliente S3: {e}")
             raise
+    
+    def upload_file(self, file_content, filename, folder="media", content_type=None):
+        """
+        Sube un archivo a S3 (genérico para backups Y documentos clínicos)
+        
+        Args:
+            file_content: Contenido del archivo (bytes o file-like object)
+            filename: Nombre del archivo
+            folder: Carpeta dentro del bucket (por defecto 'media')
+            content_type: MIME type del archivo (auto-detectar si es None)
+        
+        Returns:
+            dict: Información del archivo subido
+        """
+        try:
+            # Construir la ruta completa en S3
+            s3_key = f"{folder}/{filename}"
+            
+            # Detectar content type si no se proporciona
+            if content_type is None:
+                if filename.endswith('.pdf'):
+                    content_type = 'application/pdf'
+                elif filename.endswith('.png'):
+                    content_type = 'image/png'
+                elif filename.endswith('.jpg') or filename.endswith('.jpeg'):
+                    content_type = 'image/jpeg'
+                else:
+                    content_type = 'application/octet-stream'
+            
+            # Subir el archivo
+            self.s3_client.put_object(
+                Bucket=self.bucket_name,
+                Key=s3_key,
+                Body=file_content,
+                ContentType=content_type,
+                ServerSideEncryption='AES256',  # Encriptar en servidor
+                Metadata={
+                    'uploaded_by': 'psico-admin-system',
+                    'file_type': folder
+                }
+            )
+            
+            # Construir URL del archivo
+            file_url = f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/{s3_key}"
+            
+            logger.info(f"✅ Archivo subido exitosamente a S3: {s3_key}")
+            
+            return {
+                'success': True,
+                'filename': filename,
+                's3_key': s3_key,
+                'url': file_url,
+                'bucket': self.bucket_name,
+                'size': len(file_content) if hasattr(file_content, '__len__') else 0
+            }
+            
+        except ClientError as e:
+            error_message = f"Error al subir archivo a S3: {e}"
+            logger.error(f"❌ {error_message}")
+            return {
+                'success': False,
+                'error': error_message
+            }
+        except Exception as e:
+            error_message = f"Error inesperado al subir archivo: {e}"
+            logger.error(f"❌ {error_message}")
+            return {
+                'success': False,
+                'error': error_message
+            }
     
     def upload_backup(self, file_content, filename, folder="backups"):
         """
-        Sube un backup a S3
+        Sube un backup a S3 (mantiene compatibilidad con código existente)
         
         Args:
             file_content: Contenido del archivo (bytes)
@@ -42,55 +112,11 @@ class S3BackupStorage:
         Returns:
             dict: Información del archivo subido
         """
-        try:
-            # Construir la ruta completa en S3
-            s3_key = f"{folder}/{filename}"
-            
-            # Subir el archivo
-            self.s3_client.put_object(
-                Bucket=self.bucket_name,
-                Key=s3_key,
-                Body=file_content,
-                ContentType='application/octet-stream',
-                ServerSideEncryption='AES256',  # Encriptar en servidor
-                Metadata={
-                    'uploaded_by': 'psico-admin-system',
-                    'backup_type': 'database'
-                }
-            )
-            
-            # Construir URL del archivo
-            file_url = f"https://{self.bucket_name}.s3.{self.region}.amazonaws.com/{s3_key}"
-            
-            logger.info(f"Backup subido exitosamente a S3: {s3_key}")
-            
-            return {
-                'success': True,
-                'filename': filename,
-                's3_key': s3_key,
-                'url': file_url,
-                'bucket': self.bucket_name,
-                'size': len(file_content)
-            }
-            
-        except ClientError as e:
-            error_message = f"Error al subir backup a S3: {e}"
-            logger.error(error_message)
-            return {
-                'success': False,
-                'error': error_message
-            }
-        except Exception as e:
-            error_message = f"Error inesperado al subir backup: {e}"
-            logger.error(error_message)
-            return {
-                'success': False,
-                'error': error_message
-            }
+        return self.upload_file(file_content, filename, folder, content_type='application/octet-stream')
     
-    def download_backup(self, s3_key):
+    def download_file(self, s3_key):
         """
-        Descarga un backup desde S3
+        Descarga un archivo desde S3 (genérico)
         
         Args:
             s3_key: Ruta del archivo en S3
@@ -105,16 +131,20 @@ class S3BackupStorage:
             )
             
             file_content = response['Body'].read()
-            logger.info(f"Backup descargado exitosamente desde S3: {s3_key}")
+            logger.info(f"✅ Archivo descargado exitosamente desde S3: {s3_key}")
             
             return file_content
             
         except ClientError as e:
-            logger.error(f"Error al descargar backup desde S3: {e}")
+            logger.error(f"❌ Error al descargar archivo desde S3: {e}")
             raise
         except Exception as e:
-            logger.error(f"Error inesperado al descargar backup: {e}")
+            logger.error(f"❌ Error inesperado al descargar archivo: {e}")
             raise
+    
+    def download_backup(self, s3_key):
+        """Alias para compatibilidad con código existente"""
+        return self.download_file(s3_key)
     
     def list_backups(self, folder="backups", schema_name=None):
         """

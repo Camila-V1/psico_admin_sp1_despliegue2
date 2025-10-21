@@ -226,7 +226,7 @@ class ClinicalHistoryDetailView(generics.RetrieveUpdateAPIView):
 
 class DownloadDocumentView(generics.RetrieveAPIView):
     """
-    Vista para descargar un documento clínico de forma segura.
+    Vista para descargar un documento clínico de forma segura desde S3.
     Solo el paciente dueño o el psicólogo que subió el documento puede descargarlo.
     """
     permission_classes = [permissions.IsAuthenticated]
@@ -234,6 +234,9 @@ class DownloadDocumentView(generics.RetrieveAPIView):
     lookup_field = 'pk'
 
     def retrieve(self, request, *args, **kwargs):
+        from django.http import HttpResponse
+        from apps.backups.s3_storage import S3BackupStorage
+        
         document = self.get_object()
         user = request.user
 
@@ -253,33 +256,26 @@ class DownloadDocumentView(generics.RetrieveAPIView):
 
         logger.info(f"✅ [Download] Permisos OK")
 
-        # Obtener la ruta completa del archivo
+        # Descargar desde S3
         try:
-            file_path = document.file.path
-            logger.info(f"   File path completo: {file_path}")
+            s3_storage = S3BackupStorage()
+            file_content = s3_storage.download_file(document.file.name)
+            
+            logger.info(f"✅ [Download] Archivo descargado desde S3, enviando respuesta")
+            
+            # Determinar content type
+            content_type = 'application/octet-stream'
+            if document.file.name.endswith('.pdf'):
+                content_type = 'application/pdf'
+            elif document.file.name.endswith('.png'):
+                content_type = 'image/png'
+            elif document.file.name.endswith(('.jpg', '.jpeg')):
+                content_type = 'image/jpeg'
+            
+            response = HttpResponse(file_content, content_type=content_type)
+            response['Content-Disposition'] = f'attachment; filename="{os.path.basename(document.file.name)}"'
+            return response
+            
         except Exception as e:
-            logger.error(f"❌ [Download] Error al obtener path: {e}")
-            raise Http404(f"Error al obtener ruta del archivo: {str(e)}")
-
-        # Verificar existencia
-        if not os.path.exists(file_path):
-            logger.error(f"❌ [Download] Archivo no encontrado en filesystem")
-            logger.error(f"   Path buscado: {file_path}")
-            logger.error(f"   MEDIA_ROOT: {settings.MEDIA_ROOT}")
-            logger.error(f"   File field value: {document.file}")
-            
-            # Listar contenido del directorio padre
-            parent_dir = os.path.dirname(file_path)
-            logger.error(f"   Directorio padre: {parent_dir}")
-            if os.path.exists(parent_dir):
-                logger.error(f"   Contenido: {os.listdir(parent_dir)}")
-            else:
-                logger.error(f"   Directorio padre NO EXISTE")
-            
-            raise Http404("Archivo no encontrado en el servidor.")
-
-        # Abrir y retornar el archivo
-        logger.info(f"✅ [Download] Archivo encontrado, enviando respuesta")
-        response = FileResponse(open(file_path, 'rb'), content_type='application/octet-stream')
-        response['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
-        return response
+            logger.error(f"❌ [Download] Error al descargar desde S3: {e}")
+            raise Http404(f"Archivo no encontrado en S3: {str(e)}")

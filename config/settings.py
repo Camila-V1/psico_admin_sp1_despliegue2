@@ -440,3 +440,6 @@ AWS_DEFAULT_ACL = 'private'  # Archivos privados por defecto
 AWS_S3_OBJECT_PARAMETERS = {
     'CacheControl': 'max-age=86400',  # Cache de 1 día
 }
+
+# Usar S3 en producción, filesystem local en desarrollo
+USE_S3_STORAGE = config("USE_S3_STORAGE", default=not DEBUG, cast=bool)
