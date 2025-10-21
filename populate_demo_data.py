@@ -16,7 +16,7 @@ from django_tenants.utils import schema_context
 from apps.tenants.models import Clinic
 from apps.users.models import CustomUser
 from apps.professionals.models import ProfessionalProfile, Specialization, WorkingHours
-from apps.appointments.models import Appointment, AppointmentStatus
+from apps.appointments.models import Appointment
 from apps.clinical_history.models import Patient
 
 User = get_user_model()
@@ -159,6 +159,7 @@ def create_demo_data_for_tenant(tenant_name, data):
                     'education': 'Universidad de ejemplo',
                     'experience_years': 5,
                     'consultation_fee': Decimal('50.00'),
+                        'appointment_type': 'in_person',
                 }
             )
             
@@ -221,9 +222,9 @@ def create_demo_data_for_tenant(tenant_name, data):
         # 4. Crear citas de ejemplo
         print("\nðŸ“… Creando citas de ejemplo...")
         appointment_statuses = [
-            AppointmentStatus.SCHEDULED,
-            AppointmentStatus.CONFIRMED,
-            AppointmentStatus.COMPLETED,
+            'pending',
+            'confirmed',
+            'completed',
         ]
         
         base_date = datetime.now()
@@ -238,15 +239,16 @@ def create_demo_data_for_tenant(tenant_name, data):
                 appointment_time = time(10 + j*2, 0)  # 10:00, 12:00, etc.
                 
                 appointment, created = Appointment.objects.get_or_create(
-                    patient=patient,
-                    professional=professional,
-                    date=appointment_date.date(),
-                    time=appointment_time,
+                    patient=patient.user,
+                    psychologist=professional.user,
+                    appointment_date=appointment_date.date(),
+                    start_time=appointment_time,
                     defaults={
                         'status': appointment_statuses[j % len(appointment_statuses)],
-                        'duration': 60,
-                        'notes': f'Cita de {appointment_statuses[j % len(appointment_statuses)]}',
-                        'price': Decimal('50.00'),
+                        'end_time': time(11 + j*2, 0),
+                        'reason_for_visit': f'Cita de ejemplo - {appointment_statuses[j % len(appointment_statuses)]}',
+                        'consultation_fee': Decimal('50.00'),
+                        'appointment_type': 'in_person',
                     }
                 )
                 
