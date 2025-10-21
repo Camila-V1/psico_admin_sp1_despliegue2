@@ -237,6 +237,12 @@ class DownloadDocumentView(generics.RetrieveAPIView):
         document = self.get_object()
         user = request.user
 
+        logger.info(f"🔍 [Download] Solicitud de descarga - Doc ID: {document.id}, Usuario: {user.id} ({user.email})")
+        logger.info(f"   Documento: {document.description}")
+        logger.info(f"   Archivo field: {document.file}")
+        logger.info(f"   Archivo name: {document.file.name}")
+        logger.info(f"   Paciente ID: {document.patient.id}, Subido por: {document.uploaded_by.id}")
+
         # Verificar permisos: el paciente dueño o el profesional que lo subió
         if user.id != document.patient.id and user.id != document.uploaded_by.id:
             logger.warning(f"❌ [Download] Usuario {user.id} intentó descargar documento {document.id} sin permiso")
@@ -245,15 +251,35 @@ class DownloadDocumentView(generics.RetrieveAPIView):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        # Obtener la ruta completa del archivo
-        file_path = document.file.path
+        logger.info(f"✅ [Download] Permisos OK")
 
+        # Obtener la ruta completa del archivo
+        try:
+            file_path = document.file.path
+            logger.info(f"   File path completo: {file_path}")
+        except Exception as e:
+            logger.error(f"❌ [Download] Error al obtener path: {e}")
+            raise Http404(f"Error al obtener ruta del archivo: {str(e)}")
+
+        # Verificar existencia
         if not os.path.exists(file_path):
-            logger.error(f"❌ [Download] Archivo no encontrado: {file_path}")
+            logger.error(f"❌ [Download] Archivo no encontrado en filesystem")
+            logger.error(f"   Path buscado: {file_path}")
+            logger.error(f"   MEDIA_ROOT: {settings.MEDIA_ROOT}")
+            logger.error(f"   File field value: {document.file}")
+            
+            # Listar contenido del directorio padre
+            parent_dir = os.path.dirname(file_path)
+            logger.error(f"   Directorio padre: {parent_dir}")
+            if os.path.exists(parent_dir):
+                logger.error(f"   Contenido: {os.listdir(parent_dir)}")
+            else:
+                logger.error(f"   Directorio padre NO EXISTE")
+            
             raise Http404("Archivo no encontrado en el servidor.")
 
         # Abrir y retornar el archivo
-        logger.info(f"✅ [Download] Usuario {user.id} descargando documento {document.id}: {document.file.name}")
+        logger.info(f"✅ [Download] Archivo encontrado, enviando respuesta")
         response = FileResponse(open(file_path, 'rb'), content_type='application/octet-stream')
         response['Content-Disposition'] = f'attachment; filename="{os.path.basename(file_path)}"'
         return response
