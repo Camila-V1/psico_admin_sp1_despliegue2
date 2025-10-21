@@ -142,7 +142,7 @@ def create_demo_data_for_tenant(tenant_name, data):
                     'first_name': prof_data['first_name'],
                     'last_name': prof_data['last_name'],
                     'phone': prof_data['phone'],
-                    'role': 'professional',
+                    'user_type': 'professional',
                 }
             )
             if created:
