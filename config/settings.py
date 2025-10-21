@@ -33,6 +33,9 @@ RENDER = config("RENDER", default=False, cast=bool)
 if RENDER:
     # En Render, aceptar cualquier subdominio .onrender.com
     ALLOWED_HOSTS = ['*']  # Render maneja el routing interno
+    # Configurar proxy headers para django-tenants
+    USE_X_FORWARDED_HOST = True
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 else:
     ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1,bienestar.localhost,mindcare.localhost,*.localhost,*.127.0.0.1.nip.io", cast=Csv())
 
