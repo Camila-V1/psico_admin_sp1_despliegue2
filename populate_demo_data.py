@@ -1,5 +1,5 @@
 ﻿"""
-Script para poblar datos de demostraciÃ³n en ambos tenants (bienestar y mindcare)
+Script para poblar datos de demostracion en ambos tenants (bienestar y mindcare)
 Ejecutar en Render Shell: python populate_demo_data.py
 """
 
@@ -20,76 +20,76 @@ from apps.appointments.models import Appointment
 
 User = get_user_model()
 
-# Datos de demostraciÃ³n
+# Datos de demostracion
 DEMO_DATA = {
     'bienestar': {
         'specialties': [
-            {'name': 'PsicologÃ­a ClÃ­nica', 'description': 'Tratamiento de trastornos mentales y emocionales'},
-            {'name': 'PsicologÃ­a Infantil', 'description': 'EspecializaciÃ³n en niÃ±os y adolescentes'},
-            {'name': 'Terapia de Pareja', 'description': 'ResoluciÃ³n de conflictos en relaciones'},
-            {'name': 'PsicologÃ­a Deportiva', 'description': 'Apoyo psicolÃ³gico para deportistas'},
+            {'name': 'Psicologia Clinica', 'description': 'Tratamiento de trastornos mentales y emocionales'},
+            {'name': 'Psicologia Infantil', 'description': 'Especializacion en ninos y adolescentes'},
+            {'name': 'Terapia de Pareja', 'description': 'Resolucion de conflictos en relaciones'},
+            {'name': 'Psicologia Deportiva', 'description': 'Apoyo psicologico para deportistas'},
         ],
         'professionals': [
             {
                 'email': 'dra.martinez@bienestar.com',
                 'first_name': 'Laura',
-                'last_name': 'MartÃ­nez',
-                'specialty': 'PsicologÃ­a ClÃ­nica',
+                'last_name': 'Martinez',
+                'specialty': 'Psicologia Clinica',
                 'license': 'PSI-2024-001',
                 'phone': '+34 612 345 678',
             },
             {
                 'email': 'dr.garcia@bienestar.com',
                 'first_name': 'Carlos',
-                'last_name': 'GarcÃ­a',
-                'specialty': 'PsicologÃ­a Infantil',
+                'last_name': 'Garcia',
+                'specialty': 'Psicologia Infantil',
                 'license': 'PSI-2024-002',
                 'phone': '+34 623 456 789',
             },
             {
                 'email': 'dra.lopez@bienestar.com',
                 'first_name': 'Ana',
-                'last_name': 'LÃ³pez',
+                'last_name': 'Lopez',
                 'specialty': 'Terapia de Pareja',
                 'license': 'PSI-2024-003',
                 'phone': '+34 634 567 890',
             },
         ],
         'patients': [
-            {'email': 'juan.perez@example.com', 'first_name': 'Juan', 'last_name': 'PÃ©rez', 'phone': '+34 645 111 222'},
-            {'email': 'maria.gomez@example.com', 'first_name': 'MarÃ­a', 'last_name': 'GÃ³mez', 'phone': '+34 656 222 333'},
-            {'email': 'pedro.sanchez@example.com', 'first_name': 'Pedro', 'last_name': 'SÃ¡nchez', 'phone': '+34 667 333 444'},
-            {'email': 'lucia.fernandez@example.com', 'first_name': 'LucÃ­a', 'last_name': 'FernÃ¡ndez', 'phone': '+34 678 444 555'},
-            {'email': 'diego.rodriguez@example.com', 'first_name': 'Diego', 'last_name': 'RodrÃ­guez', 'phone': '+34 689 555 666'},
+            {'email': 'juan.perez@example.com', 'first_name': 'Juan', 'last_name': 'Perez', 'phone': '+34 645 111 222'},
+            {'email': 'maria.gomez@example.com', 'first_name': 'Maria', 'last_name': 'Gomez', 'phone': '+34 656 222 333'},
+            {'email': 'pedro.sanchez@example.com', 'first_name': 'Pedro', 'last_name': 'Sanchez', 'phone': '+34 667 333 444'},
+            {'email': 'lucia.fernandez@example.com', 'first_name': 'Lucia', 'last_name': 'Fernandez', 'phone': '+34 678 444 555'},
+            {'email': 'diego.rodriguez@example.com', 'first_name': 'Diego', 'last_name': 'Rodriguez', 'phone': '+34 689 555 666'},
         ]
     },
     'mindcare': {
         'specialties': [
-            {'name': 'PsicologÃ­a Cognitivo-Conductual', 'description': 'Tratamiento basado en pensamientos y conductas'},
-            {'name': 'NeuropsicologÃ­a', 'description': 'EvaluaciÃ³n y rehabilitaciÃ³n cognitiva'},
-            {'name': 'PsicologÃ­a Organizacional', 'description': 'Salud mental en el trabajo'},
-            {'name': 'Mindfulness y Bienestar', 'description': 'TÃ©cnicas de atenciÃ³n plena'},
+            {'name': 'Psicologia Cognitivo-Conductual', 'description': 'Tratamiento basado en pensamientos y conductas'},
+            {'name': 'Neuropsicologia', 'description': 'Evaluacion y rehabilitacion cognitiva'},
+            {'name': 'Psicologia Organizacional', 'description': 'Salud mental en el trabajo'},
+            {'name': 'Mindfulness y Bienestar', 'description': 'Tecnicas de atencion plena'},
         ],
         'professionals': [
             {
                 'email': 'dra.torres@mindcare.com',
                 'first_name': 'Isabel',
                 'last_name': 'Torres',
-                'specialty': 'PsicologÃ­a Cognitivo-Conductual',
+                'specialty': 'Psicologia Cognitivo-Conductual',
                 'license': 'PSI-2024-101',
                 'phone': '+34 611 987 654',
             },
             {
                 'email': 'dr.ramirez@mindcare.com',
                 'first_name': 'Miguel',
-                'last_name': 'RamÃ­rez',
-                'specialty': 'NeuropsicologÃ­a',
+                'last_name': 'Ramirez',
+                'specialty': 'Neuropsicologia',
                 'license': 'PSI-2024-102',
                 'phone': '+34 622 876 543',
             },
             {
                 'email': 'dra.morales@mindcare.com',
-                'first_name': 'SofÃ­a',
+                'first_name': 'Sofia',
                 'last_name': 'Morales',
                 'specialty': 'Mindfulness y Bienestar',
                 'license': 'PSI-2024-103',
@@ -107,19 +107,19 @@ DEMO_DATA = {
 }
 
 def create_demo_data_for_tenant(tenant_name, data):
-    """Crear datos de demostraciÃ³n para un tenant especÃ­fico"""
+    """Crear datos de demostracion para un tenant especifico"""
     
     try:
         clinic = Clinic.objects.get(schema_name=tenant_name)
     except Clinic.DoesNotExist:
-        print(f"âŒ Tenant '{tenant_name}' no existe")
+        print(f"X Tenant '{tenant_name}' no existe")
         return
     
     with schema_context(tenant_name):
-        print(f"\nðŸ¥ Poblando datos para: {clinic.name} (schema: {tenant_name})")
+        print(f"\n>> Poblando datos para: {clinic.name} (schema: {tenant_name})")
         
         # 1. Crear especialidades
-        print("\n📚 Creando especialidades...")
+        print("\n>> Creando especialidades...")
         specializations = {}
         for spec_data in data['specialties']:
             specialization, created = Specialization.objects.get_or_create(
@@ -127,11 +127,11 @@ def create_demo_data_for_tenant(tenant_name, data):
                 defaults={'description': spec_data['description']}
             )
             specializations[spec_data['name']] = specialization
-            status = "✅ Creada" if created else "ℹ️ Ya existe"
+            status = "[OK] Creada" if created else "[INFO] Ya existe"
             print(f"  {status}: {specialization.name}")
         
         # 2. Crear profesionales con usuarios
-        print("\nðŸ‘¨â€âš•ï¸ Creando profesionales...")
+        print("\n>> Creando profesionales...")
         professionals = []
         for prof_data in data['professionals']:
             # Crear usuario
@@ -167,7 +167,7 @@ def create_demo_data_for_tenant(tenant_name, data):
                 professional.specializations.add(specialization)
             
             professionals.append(professional)
-            status = "✅ Creado" if created else "ℹ️ Ya existe"
+            status = "[OK] Creado" if created else "[INFO] Ya existe"
             print(f"  {status}: {professional.user.get_full_name()} - {prof_data['specialty']}")
             
             # Crear horarios (Lunes a Viernes, 9:00 - 18:00)
@@ -182,10 +182,10 @@ def create_demo_data_for_tenant(tenant_name, data):
                     }
                 )
                 if created:
-                    print(f"    📅 Horario creado: {schedule.get_day_of_week_display()} 9:00-18:00")
+                    print(f"    [OK] Horario creado: {schedule.get_day_of_week_display()} 9:00-18:00")
         
         # 3. Crear pacientes
-        print("\nðŸ§‘â€ðŸ¤â€ðŸ§‘ Creando pacientes...")
+        print("\n>> Creando pacientes...")
         patients = []
         for patient_data in data['patients']:
             # Crear usuario
@@ -197,8 +197,8 @@ def create_demo_data_for_tenant(tenant_name, data):
                     'last_name': patient_data['last_name'],
                     'phone': patient_data['phone'],
                     'user_type': 'patient',
-                    'date_of_birth': datetime.now().date() - timedelta(days=365*30),  # 30 años
-                    'address': 'Dirección de ejemplo',
+                    'date_of_birth': datetime.now().date() - timedelta(days=365*30),  # 30 anos
+                    'address': 'Direccion de ejemplo',
                 }
             )
             if created:
@@ -216,11 +216,11 @@ def create_demo_data_for_tenant(tenant_name, data):
             )
             
             patients.append(user)
-            status = "✅ Creado" if created else "ℹ️ Ya existe"
+            status = "[OK] Creado" if created else "[INFO] Ya existe"
             print(f"  {status}: {user.get_full_name()}")
         
         # 4. Crear citas de ejemplo
-        print("\nðŸ“… Creando citas de ejemplo...")
+        print("\n>> Creando citas de ejemplo...")
         appointment_statuses = [
             'pending',
             'confirmed',

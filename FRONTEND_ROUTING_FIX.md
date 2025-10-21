@@ -1,263 +1,283 @@
-# 🔧 Correcciones de Routing del Frontend
+# 🔧 Estado Actual y Cambios Pendientes del Frontend
 
-## 📋 Problemas Detectados
+## ✅ CAMBIOS YA IMPLEMENTADOS (Commit: af9d875)
 
-1. ✅ Admin general (`admin@psicoadmin.xyz`) está intentando login en tenant `bienestar`
-2. ✅ Vercel desplegando en dominio incorrecto (`bienestar-psico-ml50pmcja...`)
-3. ✅ Confusión sobre qué URL debe mostrar qué página
+### 1️⃣ **LandingPage.jsx - ✅ FUNCIONANDO**
+- Detecta si está en dominio raíz (`psicoadmin.xyz`)
+- Muestra formulario de registro de clínicas en dominio raíz
+- Redirige a `/login` solo en subdominios `-app`
 
----
+### 2️⃣ **tenants.js - ✅ FUNCIONANDO**
+- `getApiBaseURL()` remueve `-app` del hostname
+- Frontend en `bienestar-app` apunta a backend `bienestar`
 
-## 🎯 Arquitectura Correcta del Sistema
-
-### 🌐 **Dominio Principal** (`psicoadmin.xyz`)
-
-| URL | Página | Propósito |
-|-----|--------|-----------|
-| `https://psicoadmin.xyz/` | **LandingPage.jsx** | Formulario para registro de NUEVAS clínicas |
-| `https://psicoadmin.xyz/login` | ❌ **NO DEBE EXISTIR** | El admin general usa Django Admin, NO el frontend |
-
-### 🏥 **Subdominios de Clínicas** (`-app.psicoadmin.xyz`)
-
-| URL | Página | Propósito |
-|-----|--------|-----------|
-| `https://bienestar-app.psicoadmin.xyz/` | **LandingPage.jsx** (con redirect) | Redirige automáticamente a `/login` |
-| `https://bienestar-app.psicoadmin.xyz/login` | **LoginPage.jsx** | Login para admins/profesionales/pacientes |
-| `https://bienestar-app.psicoadmin.xyz/register` | **RegisterPage.jsx** | Registro de nuevos pacientes |
-| `https://bienestar-app.psicoadmin.xyz/dashboard` | **Dashboard** | Panel según rol (admin/pro/paciente) |
+### 3️⃣ **Routing - ✅ FUNCIONANDO**
+- `/` → LandingPage (registro de clínicas en raíz, redirect en subdominios)
+- `/login` → LoginPage (funciona en ambos dominios)
+- `/register` → RegisterPage (solo subdominios)
 
 ---
 
-## 🔧 Cambios Necesarios en el Frontend
+## ⚠️ PROBLEMA ACTUAL
 
-### 1️⃣ **Remover ruta de login del dominio principal**
+### 🐛 **Error 400 en Login**
 
-**Archivo:** `src/main.jsx` o donde estén las rutas
+**Logs del backend:**
+```
+INFO    request.data: {'email': 'admin@psicoadmin.xyz', 'password': 'admin123'}
+ERROR   Credenciales inválidas o usuario inactivo
+```
 
-```jsx
-// ❌ ANTES (INCORRECTO):
-<Route path="/login" element={<LoginPage />} />  // En psicoadmin.xyz
+**Causa:** El frontend está enviando login del admin general (`admin@psicoadmin.xyz`) al backend del tenant `bienestar` en lugar del backend público.
 
-// ✅ DESPUÉS (CORRECTO):
-// Solo la landing page en psicoadmin.xyz
-<Route path="/" element={<LandingPage />} />
-// NO debe haber ruta /login en psicoadmin.xyz
+**URL incorrecta:** 
+```
+❌ https://bienestar.psicoadmin.xyz/api/auth/login/
+```
+
+**URL correcta:**
+```
+✅ https://psico-admin.onrender.com/api/auth/login/
 ```
 
 ---
 
-### 2️⃣ **Actualizar LandingPage.jsx para manejar ambos casos**
+## 🔧 CAMBIOS PENDIENTES
 
-**Archivo:** `src/pages/LandingPage.jsx`
+### ⚠️ **SOLO FALTA ESTO:** LoginPage.jsx
+
+---
+
+## 🔧 CAMBIOS PENDIENTES
+
+### ⚠️ **SOLO FALTA ESTO:** Modificar LoginPage.jsx
+
+**El problema:** LoginPage actual no diferencia entre admin general y usuarios de clínica.
+
+**Solución:** Agregar lógica para detectar tipo de usuario y usar el backend correcto.
+
+**Archivo:** `src/pages/LoginPage.jsx` (o donde esté tu componente de login)
+
+**Cambios necesarios:**
 
 ```jsx
-import { useEffect } from 'react';
+// DENTRO del handleLogin, ANTES de hacer el fetch:
+
+const handleLogin = async (e) => {
+  e.preventDefault();
+
+  const hostname = window.location.hostname;
+  const isRootDomain = hostname === 'psicoadmin.xyz' || hostname === 'www.psicoadmin.xyz';
+  const isClinicDomain = hostname.includes('-app.psicoadmin.xyz');
+
+  // 🔍 Detectar tipo de usuario por el email
+  const isGlobalAdmin = email === 'admin@psicoadmin.xyz';
+
+  // 🚫 CASO 1: Admin general intentando login en dominio de clínica
+  if (isGlobalAdmin && isClinicDomain) {
+    alert('⚠️ Usuario admin global detectado.\n\nDebe iniciar sesión en: https://psicoadmin.xyz/login');
+    window.location.href = 'https://psicoadmin.xyz/login';
+    return;
+  }
+
+  // 🚫 CASO 2: Usuario de clínica intentando login en dominio raíz
+  if (!isGlobalAdmin && isRootDomain) {
+    // Extraer nombre de la clínica del email
+    const emailDomain = email.split('@')[1]; // ej: bienestar.com
+    const clinicName = emailDomain.split('.')[0]; // ej: bienestar
+    
+    alert(`⚠️ Usuario de clínica detectado.\n\nDebe iniciar sesión en: https://${clinicName}-app.psicoadmin.xyz/login`);
+    window.location.href = `https://${clinicName}-app.psicoadmin.xyz/login`;
+    return;
+  }
+
+  // ✅ CASO 3: Usuario correcto en dominio correcto
+  try {
+    // 🎯 ESTA ES LA PARTE CLAVE:
+    const apiUrl = isRootDomain && isGlobalAdmin
+      ? 'https://psico-admin.onrender.com/api/auth/login/'  // Backend público
+      : getApiBaseURL() + '/auth/login/';  // Backend del tenant
+
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+
+    const data = await response.json();
+
+    if (response.ok) {
+      localStorage.setItem('token', data.token);
+      localStorage.setItem('user', JSON.stringify(data.user));
+      navigate('/dashboard');
+    } else {
+      alert('Credenciales inválidas');
+    }
+  } catch (error) {
+    console.error('Error en el login:', error);
+    alert('Error de conexión');
+  }
+};
+```
+
+---
+
+## 📝 RESUMEN DE LO QUE FALTA
+
+### ✅ Ya funciona:
+- ✅ LandingPage detecta dominio correctamente
+- ✅ Routing configurado
+- ✅ getApiBaseURL() funciona para subdominios
+
+### ⚠️ Falta implementar:
+- ❌ **LoginPage.jsx:** Detectar admin general y usar backend público
+- ❌ **LoginPage.jsx:** Validar que usuario coincida con dominio
+- ❌ **LoginPage.jsx:** Mostrar alertas y redirigir si hay error
+
+---
+
+## 🧪 Testing después del cambio
+
+Una vez implementado, probar:
+
+1. ✅ Login en `psicoadmin.xyz/login` con `admin@psicoadmin.xyz` → Debe funcionar
+2. ✅ Login en `psicoadmin.xyz/login` con `admin@bienestar.com` → Debe redirigir a bienestar-app
+3. ✅ Login en `bienestar-app.../login` con `admin@psicoadmin.xyz` → Debe redirigir a psicoadmin.xyz
+4. ✅ Login en `bienestar-app.../login` con `admin@bienestar.com` → Debe funcionar
+
+---
+
+## 📋 Código completo sugerido para LoginPage.jsx
+
+```jsx
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getTenantFromHostname } from '../config/tenants';
 
-function LandingPage() {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const hostname = window.location.hostname;
-    const currentTenant = getTenantFromHostname();
-
-    // Si estamos en un subdominio de clínica (-app.psicoadmin.xyz)
-    if (hostname.includes('-app.psicoadmin.xyz')) {
-      // Verificar si la clínica existe
-      checkTenantExists(currentTenant).then(exists => {
-        if (exists) {
-          // Redirigir automáticamente al login
-          navigate('/login');
-        } else {
-          // Mostrar página de error "Clínica no encontrada"
-          navigate('/404');
-        }
-      });
-    }
-    // Si estamos en el dominio principal (psicoadmin.xyz)
-    // Mostrar el formulario de registro de nuevas clínicas (código actual)
-  }, [navigate]);
-
-  // ... resto del código actual ...
-}
-```
-
----
-
-### 3️⃣ **Actualizar LoginPage.jsx para evitar confusión**
-
-**Archivo:** `src/pages/LoginPage.jsx`
-
-**Agregar validación al inicio:**
-
-```jsx
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-
 function LoginPage() {
   const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
-  useEffect(() => {
+  const handleLogin = async (e) => {
+    e.preventDefault();
+
     const hostname = window.location.hostname;
+    const isMainDomain = hostname === 'psicoadmin.xyz' || hostname === 'www.psicoadmin.xyz';
+    const isClinicDomain = hostname.includes('-app.psicoadmin.xyz');
 
-    // Si estamos en el dominio principal (sin -app)
-    if (hostname === 'psicoadmin.xyz' || hostname === 'www.psicoadmin.xyz') {
-      // El admin general NO usa este login, usa Django Admin
-      alert('Para acceder como administrador del sistema, use: https://psico-admin.onrender.com/admin/');
-      // Redirigir a la landing page
-      navigate('/');
+    // Verificar si es el admin general
+    const isGlobalAdmin = email === 'admin@psicoadmin.xyz';
+
+    // CASO 1: Admin general intentando login en dominio de clínica
+    if (isGlobalAdmin && isClinicDomain) {
+      alert('⚠️ Usuario admin global detectado.\n\nDebe iniciar sesión en: https://psicoadmin.xyz/login');
+      window.location.href = 'https://psicoadmin.xyz/login';
       return;
     }
 
-    // Si llegamos aquí, estamos en un subdominio -app, continuar normal
-  }, [navigate]);
+    // CASO 2: Admin de clínica intentando login en dominio principal
+    if (!isGlobalAdmin && isMainDomain) {
+      // Extraer el dominio de la clínica del email
+      const emailDomain = email.split('@')[1]; // ej: bienestar.com
+      const clinicName = emailDomain.split('.')[0]; // ej: bienestar
+      
+      alert(`⚠️ Usuario de clínica detectado.\n\nDebe iniciar sesión en: https://${clinicName}-app.psicoadmin.xyz/login`);
+      window.location.href = `https://${clinicName}-app.psicoadmin.xyz/login`;
+      return;
+    }
 
-  // ... resto del código actual ...
-}
-```
+    // CASO 3: Login correcto - continuar con la petición
+    try {
+      const apiUrl = isMainDomain 
+        ? 'https://psico-admin.onrender.com/api/auth/login/'  // Backend público
+        : getApiBaseURL() + '/auth/login/';  // Backend del tenant
 
----
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
 
-### 4️⃣ **Agregar página de información para admin general**
+      const data = await response.json();
 
-**Archivo nuevo:** `src/pages/AdminInfoPage.jsx`
+      if (response.ok) {
+        // Guardar token y redirigir al dashboard
+        localStorage.setItem('token', data.token);
+        localStorage.setItem('user', JSON.stringify(data.user));
+        navigate('/dashboard');
+      } else {
+        alert('Credenciales inválidas: ' + (data.non_field_errors?.[0] || 'Error desconocido'));
+      }
+    } catch (error) {
+      console.error('Error en el login:', error);
+      alert('Error de conexión. Intente nuevamente.');
+    }
+  };
 
-```jsx
-import React from 'react';
-import { Link } from 'react-router-dom';
-
-export default function AdminInfoPage() {
   return (
     <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8">
-        <div className="text-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Administración del Sistema
-          </h1>
-          <p className="text-gray-600">
-            Acceso para administradores globales
-          </p>
-        </div>
+        <h1 className="text-3xl font-bold text-gray-900 mb-6 text-center">
+          Iniciar Sesión
+        </h1>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-          <h2 className="text-lg font-semibold text-blue-900 mb-2">
-            🔐 Panel de Administración
-          </h2>
-          <p className="text-blue-800 text-sm mb-4">
-            Los administradores del sistema deben usar el panel de Django Admin:
-          </p>
-          <a
-            href="https://psico-admin.onrender.com/admin/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg text-center transition-colors"
-          >
-            Ir a Django Admin →
-          </a>
-        </div>
-
-        <div className="bg-gray-50 rounded-lg p-4">
-          <h3 className="font-semibold text-gray-900 mb-2">Credenciales:</h3>
-          <div className="space-y-1 text-sm text-gray-700 font-mono">
-            <p>📧 Email: admin@psicoadmin.xyz</p>
-            <p>🔑 Password: admin123</p>
+        <form onSubmit={handleLogin}>
+          <div className="mb-4">
+            <label className="block text-gray-700 text-sm font-bold mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="tu@email.com"
+              required
+            />
           </div>
-        </div>
 
-        <div className="mt-6 text-center">
-          <Link
-            to="/"
-            className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+          <div className="mb-6">
+            <label className="block text-gray-700 text-sm font-bold mb-2">
+              Contraseña
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="••••••••"
+              required
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg transition-colors"
           >
-            ← Volver al inicio
-          </Link>
+            Iniciar Sesión
+          </button>
+        </form>
+
+        {/* Info adicional */}
+        <div className="mt-4 text-sm text-gray-600 text-center">
+          <p>¿No tienes cuenta? <a href="/register" className="text-blue-600 hover:underline">Regístrate</a></p>
         </div>
       </div>
     </div>
   );
 }
-```
 
-**Agregar ruta en `main.jsx`:**
-
-```jsx
-<Route path="/admin-info" element={<AdminInfoPage />} />
+export default LoginPage;
 ```
 
 ---
 
-### 5️⃣ **Actualizar configuración de Vercel**
-
-**Problema actual:** Vercel está desplegando en `bienestar-psico-ml50pmcja-vazquescamila121...`
-
-**Archivo:** `vercel.json`
-
-```json
-{
-  "version": 2,
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "dist"
-      }
-    }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ],
-  "env": {
-    "NODE_ENV": "production"
-  }
-}
-```
-
-**Configurar dominios en Vercel Dashboard:**
-
-1. Ve a tu proyecto en Vercel
-2. Settings → Domains
-3. **Agregar dominios:**
-   - `psicoadmin.xyz` (principal)
-   - `www.psicoadmin.xyz` (alias)
-   - `bienestar-app.psicoadmin.xyz`
-   - `mindcare-app.psicoadmin.xyz`
-   - `*.psicoadmin.xyz` (wildcard para futuras clínicas)
-
-4. **Remover dominios viejos:**
-   - `bienestar-psico.vercel.app`
-   - `bienestar-psico-ml50pmcja...`
-
----
-
-### 6️⃣ **Actualizar el README del proyecto**
-
-**Archivo:** `README.md` del frontend
-
-Agregar sección:
-
-```markdown
-## 🌐 Arquitectura de URLs
-
-### Dominio Principal
-- `https://psicoadmin.xyz/` → Registro de nuevas clínicas
-- `https://psicoadmin.xyz/admin-info` → Información para admins del sistema
-
-### Admin del Sistema (Django)
-- `https://psico-admin.onrender.com/admin/`
-  - Email: admin@psicoadmin.xyz
-  - Password: admin123
-
-### Clínicas (Subdominios -app)
-- `https://bienestar-app.psicoadmin.xyz/login` → Login
-- `https://bienestar-app.psicoadmin.xyz/register` → Registro de pacientes
-- `https://mindcare-app.psicoadmin.xyz/login` → Login
-
-## 🔑 Credenciales de Prueba
+## � Credenciales de Prueba
 
 ### Bienestar
 - Admin: `admin@bienestar.com` / `admin123`
@@ -274,10 +294,10 @@ Agregar sección:
 
 ## ✅ Checklist de Implementación
 
-- [ ] **1. Remover ruta `/login` del dominio principal**
-- [ ] **2. Actualizar `LandingPage.jsx` para manejar redirect automático**
-- [ ] **3. Agregar validación en `LoginPage.jsx`**
-- [ ] **4. Crear `AdminInfoPage.jsx`**
+- [ ] **1. Configurar routing con /login en ambos dominios**
+- [ ] **2. Actualizar `LoginPage.jsx` con detección inteligente de usuario**
+- [ ] **3. Actualizar `LandingPage.jsx` para redirect automático en subdominios**
+- [ ] **4. Crear `GlobalAdminDashboard.jsx` (opcional)**
 - [ ] **5. Configurar dominios en Vercel**
 - [ ] **6. Eliminar deployments viejos de Vercel**
 - [ ] **7. Actualizar README**
@@ -290,11 +310,13 @@ Agregar sección:
 Después de implementar, probar:
 
 1. ✅ `https://psicoadmin.xyz/` → Muestra formulario de registro de clínicas
-2. ✅ `https://psicoadmin.xyz/login` → Redirige a `/admin-info` o `/`
-3. ✅ `https://bienestar-app.psicoadmin.xyz/` → Redirige a `/login`
-4. ✅ `https://bienestar-app.psicoadmin.xyz/login` → Muestra formulario de login
-5. ✅ Login con `admin@bienestar.com` / `admin123` → Funciona
-6. ✅ Login con `admin@psicoadmin.xyz` en bienestar-app → Muestra error claro
+2. ✅ `https://psicoadmin.xyz/login` → Login del admin general (admin@psicoadmin.xyz)
+3. ✅ `https://psicoadmin.xyz/login` con usuario de clínica → Redirige a `bienestar-app.../login`
+4. ✅ `https://bienestar-app.psicoadmin.xyz/` → Redirige a `/login`
+5. ✅ `https://bienestar-app.psicoadmin.xyz/login` → Muestra formulario de login
+6. ✅ `https://bienestar-app.psicoadmin.xyz/login` con admin general → Redirige a `psicoadmin.xyz/login`
+7. ✅ Login con `admin@bienestar.com` / `admin123` en bienestar-app → Funciona
+8. ✅ Login con `admin@psicoadmin.xyz` / `admin123` en psicoadmin.xyz → Funciona
 
 ---
 
