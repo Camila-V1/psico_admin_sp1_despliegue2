@@ -158,7 +158,6 @@ def create_demo_data_for_tenant(tenant_name, data):
                     'education': 'Universidad de ejemplo',
                     'experience_years': 5,
                     'consultation_fee': Decimal('50.00'),
-                        'appointment_type': 'in_person',
                 }
             )
             
@@ -255,7 +254,7 @@ def create_demo_data_for_tenant(tenant_name, data):
                 
                 if created:
                     appointment_count += 1
-                    print(f"  ✅ Cita: {patient.user.get_full_name()} con {professional.user.get_full_name()} - {appointment_date.strftime('%Y-%m-%d')} {appointment_time}")
+                    print(f"  ✅ Cita: {patient.get_full_name()} con {professional.user.get_full_name()} - {appointment_date.strftime('%Y-%m-%d')} {appointment_time}")
         
         print(f"\n✅ Total de citas creadas: {appointment_count}")
         
