@@ -79,24 +79,27 @@ class CreateCheckoutSessionView(APIView):
             }, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # --- CORRECCIÓN MEJORADA PARA REDIRECCIÓN AL FRONTEND ---
-            # Obtenemos el host del backend (ej: bienestar.localhost:8000)
+            # --- CORRECCIÓN PARA REDIRECCIÓN AL FRONTEND ---
             backend_host = request.get_host()
             
-            # Detectamos diferentes puertos comunes del frontend
-            if ':8000' in backend_host:
-                # Puertos comunes para React: 3000, 5173, 5174, 5175
-                for frontend_port in ['5174', '5173', '3000', '5175']:
-                    frontend_host = backend_host.replace(':8000', f':{frontend_port}')
-                    break
+            # Determinar el protocolo y host del frontend
+            if 'localhost' in backend_host or '127.0.0.1' in backend_host:
+                # Desarrollo local
+                if ':8000' in backend_host:
+                    # Puertos comunes para React: 5174, 5173, 3000
+                    for frontend_port in ['5174', '5173', '3000']:
+                        frontend_host = backend_host.replace(':8000', f':{frontend_port}')
+                        break
                 else:
-                    # Fallback al puerto más común
-                    frontend_host = backend_host.replace(':8000', ':3000')
+                    frontend_host = f"{backend_host}:3000"
+                protocol = 'http'
             else:
-                # Si no tiene puerto específico, asumir puerto 3000
-                frontend_host = f"{backend_host}:3000"
+                # Producción - usar HTTPS y el mismo subdominio
+                # backend_host será algo como: bienestar.psicoadmin.xyz
+                frontend_host = backend_host
+                protocol = 'https'
             
-            logger.info(f"Redirigiendo pagos desde {backend_host} hacia {frontend_host}")
+            logger.info(f"Redirigiendo pagos desde {backend_host} hacia {protocol}://{frontend_host}")
             # --- FIN DE LA CORRECCIÓN ---
             
             # 3. Crear la sesión de pago en Stripe
@@ -116,9 +119,9 @@ class CreateCheckoutSessionView(APIView):
                     },
                 ],
                 mode='payment',
-                # --- CORRECCIÓN: URLs ahora apuntan al frontend ---
-                success_url=f"http://{frontend_host}/payment-success?session_id={{CHECKOUT_SESSION_ID}}",
-                cancel_url=f"http://{frontend_host}/payment-cancel",
+                # URLs de redirección con protocolo correcto (http local, https producción)
+                success_url=f"{protocol}://{frontend_host}/payment-success?session_id={{CHECKOUT_SESSION_ID}}",
+                cancel_url=f"{protocol}://{frontend_host}/payment-cancel",
                 # Guardamos el ID de nuestra cita para saber qué actualizar después
                 metadata={
                     'appointment_id': appointment.id,
