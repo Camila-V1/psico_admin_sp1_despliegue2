@@ -1,5 +1,6 @@
 # apps/clinical_history/views.py
 
+import logging
 from rest_framework import viewsets, permissions, status, generics
 from rest_framework.response import Response
 from django.db.models import Q
@@ -8,6 +9,8 @@ from .models import SessionNote, ClinicalDocument, ClinicalHistory  # <-- IMPORT
 from .serializers import SessionNoteSerializer, ClinicalDocumentSerializer, PsychologistPatientSerializer, ClinicalHistorySerializer  # <-- IMPORTA ClinicalHistorySerializer
 from apps.appointments.models import Appointment
 from apps.users.models import CustomUser
+
+logger = logging.getLogger(__name__)
 
 class IsAssociatedProfessional(permissions.BasePermission):
     """
@@ -211,4 +214,8 @@ class ClinicalHistoryDetailView(generics.RetrieveUpdateAPIView):
 
     def perform_update(self, serializer):
         # Asigna automáticamente al profesional que está realizando la última actualización.
+        logger.info(f"📝 [ClinicalHistory] Usuario {self.request.user.id} actualizando historia clínica del paciente {self.kwargs.get('patient_id')}")
+        logger.debug(f"   Campos recibidos: {serializer.validated_data.keys()}")
+        logger.debug(f"   Valores: {serializer.validated_data}")
         serializer.save(last_updated_by=self.request.user)
+        logger.info(f"✅ [ClinicalHistory] Historia clínica actualizada exitosamente")

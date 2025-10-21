@@ -1,5 +1,6 @@
 # apps/professionals/views.py
 
+import logging
 from rest_framework import status, permissions, generics
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -16,6 +17,7 @@ from .serializers import (
 )
 from apps.appointments.models import Appointment
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
 
 @api_view(['GET', 'POST', 'PUT', 'PATCH'])
@@ -127,6 +129,8 @@ def list_professionals(request):
     """
     CU-08: Buscar y Filtrar Profesionales
     """
+    logger.info(f"🔍 [Professionals] Listando profesionales - Parámetros: {request.query_params.dict()}")
+    
     # Filtros disponibles
     specialization = request.query_params.get('specialization')
     city = request.query_params.get('city')
@@ -140,36 +144,47 @@ def list_professionals(request):
         is_active=True,
         profile_completed=True
     )
+    logger.debug(f"   Perfiles base (activos + completados): {profiles.count()}")
     
     # Aplicar filtros
     if specialization:
         profiles = profiles.filter(specializations__name__icontains=specialization)
+        logger.debug(f"   Después de filtro especialización: {profiles.count()}")
     
     if city:
         profiles = profiles.filter(city__icontains=city)
+        logger.debug(f"   Después de filtro ciudad: {profiles.count()}")
     
     if max_fee:
         try:
             profiles = profiles.filter(consultation_fee__lte=float(max_fee))
+            logger.debug(f"   Después de filtro tarifa máxima: {profiles.count()}")
         except ValueError:
+            logger.warning(f"   ⚠️ Valor inválido para max_fee: {max_fee}")
             pass
     
     if min_rating:
         try:
             profiles = profiles.filter(average_rating__gte=float(min_rating))
+            logger.debug(f"   Después de filtro rating mínimo: {profiles.count()}")
         except ValueError:
+            logger.warning(f"   ⚠️ Valor inválido para min_rating: {min_rating}")
             pass
     
     if accepts_online:
         profiles = profiles.filter(accepts_online_sessions=True)
+        logger.debug(f"   Después de filtro sesiones online: {profiles.count()}")
     
     if search:
         profiles = profiles.filter(
             Q(user__first_name__icontains=search) |
             Q(user__last_name__icontains=search)
         )
+        logger.debug(f"   Después de búsqueda por nombre: {profiles.count()}")
     
     serializer = ProfessionalPublicSerializer(profiles, many=True)
+    logger.info(f"✅ [Professionals] Retornando {profiles.count()} profesionales")
+    
     return Response({
         'count': profiles.count(),
         'professionals': serializer.data

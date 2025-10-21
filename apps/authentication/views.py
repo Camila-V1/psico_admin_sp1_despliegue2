@@ -1,5 +1,6 @@
 # apps/authentication/views.py
 
+import logging
 from rest_framework import status, permissions
 from rest_framework.decorators import api_view, permission_classes, authentication_classes
 from rest_framework.response import Response
@@ -22,6 +23,7 @@ from .serializers import (
     ChangePasswordSerializer
 )
 
+logger = logging.getLogger(__name__)
 User = get_user_model()
 
 @api_view(['POST'])
@@ -54,16 +56,14 @@ def register_user(request):
 @authentication_classes([])
 @permission_classes([permissions.AllowAny])
 def login_user(request):
-    # 🔍 DEBUG: Log de lo que llega del frontend
-    import logging
-    logger = logging.getLogger(__name__)
-    logger.info(f"🔍 LOGIN REQUEST DEBUG:")
-    logger.info(f"   Content-Type: {request.content_type}")
-    logger.info(f"   request.data: {request.data}")
+    logger.info(f"🔐 [Login] Intento de login - Email: {request.data.get('email')}")
+    logger.debug(f"   Content-Type: {request.content_type}")
+    logger.debug(f"   request.data: {request.data}")
     
     serializer = UserLoginSerializer(data=request.data, context={'request': request})
     if serializer.is_valid():
         user = serializer.validated_data['user']
+        logger.info(f"✅ [Login] Validación exitosa - Usuario: {user.email} (ID: {user.id})")
         
         # --- INICIO DE LA CORRECCIÓN ---
         # Importamos el modelo PublicUser para poder comprobar de qué tipo es el usuario
@@ -71,6 +71,7 @@ def login_user(request):
 
         # Si el usuario autenticado es una instancia de PublicUser, es el admin global.
         if isinstance(user, PublicUser):
+            logger.info(f"👑 [Login] Admin Global detectado - Email: {user.email}")
             # Para el admin global, no generamos un token de API.
             # Su autenticación se maneja por sesiones de Django para el /admin/.
             # Devolvemos una respuesta especial para que el frontend sepa cómo actuar.
@@ -88,8 +89,11 @@ def login_user(request):
         # --- FIN DE LA CORRECCIÓN ---
 
         # Si no es un PublicUser, es un CustomUser de una clínica.
+        logger.info(f"👤 [Login] Usuario de clínica detectado - Tipo: {user.user_type}")
         # Continuamos con la lógica original de crear un token.
         token, created = Token.objects.get_or_create(user=user)
+        logger.debug(f"   Token generado: {token.key[:10]}... (nuevo: {created})")
+        
         return Response({
             'message': 'Sesión iniciada exitosamente',
             'user': {
@@ -103,7 +107,7 @@ def login_user(request):
         }, status=status.HTTP_200_OK)
         
     # 🔍 DEBUG: Si la validación falla, logueamos los errores
-    logger.error(f"❌ VALIDACIÓN FALLÓ:")
+    logger.error(f"❌ [Login] Validación fallida para email: {request.data.get('email')}")
     logger.error(f"   Errores del serializer: {serializer.errors}")
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 

@@ -94,7 +94,9 @@ TENANT_APPS = (
 INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
 
 MIDDLEWARE = [
-    'apps.tenants.custom_tenant_middleware.CustomTenantMiddleware',  # � REEMPLAZO de TenantMainMiddleware
+    'config.logging_middleware.RequestLoggingMiddleware',  # 📝 Logging detallado de requests
+    'apps.tenants.custom_tenant_middleware.CustomTenantMiddleware',  # 🔥 REEMPLAZO de TenantMainMiddleware
+    'config.logging_middleware.TenantDetectionLoggingMiddleware',  # 📝 Logging de detección de tenants
     # 'django_tenants.middleware.main.TenantMainMiddleware',  # ❌ DESHABILITADO: No funciona en Render
     'apps.auditlog.local.RequestLocalStorageMiddleware',  # Capturar request para logs
     # 'fix_tenant_middleware.FixTenantURLConfMiddleware',  # ❌ DESHABILITADO: Interfiere con django-tenants
