@@ -263,3 +263,110 @@ def clinic_detail_stats(request, clinic_id):
             {'error': f'Error interno: {str(e)}'}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+# ========== VISTAS PÚBLICAS PARA REGISTRO ==========
+
+from rest_framework.permissions import AllowAny
+from .serializers import TenantRegistrationSerializer, SubdomainCheckSerializer
+
+@api_view(['POST'])
+@permission_classes([AllowAny])  # ⭐ Acceso público
+def register_tenant(request):
+    """
+    Endpoint público para registro de nuevos tenants (clínicas).
+    
+    POST /api/public/register/
+    Body: {
+        "clinic_name": "Mi Clínica",
+        "subdomain": "miclinica",
+        "admin_email": "admin@miclinica.com",
+        "admin_phone": "+34 600 000 000",  // opcional
+        "address": "Calle Principal 123"    // opcional
+    }
+    """
+    serializer = TenantRegistrationSerializer(data=request.data)
+    
+    if serializer.is_valid():
+        try:
+            result = serializer.save()
+            
+            response_data = {
+                'success': True,
+                'message': '¡Clínica creada exitosamente!',
+                'data': {
+                    'clinic_name': result['tenant'].name,
+                    'subdomain': result['subdomain'],
+                    'admin_url': f"https://{result['subdomain']}.psicoadmin.xyz/admin/",
+                    'frontend_url': f"https://{result['subdomain']}-app.psicoadmin.xyz/",
+                    'admin_email': result['admin_email'],
+                    'temporary_password': result['temporary_password'],
+                    'instructions': (
+                        f"Tu clínica ha sido creada exitosamente. "
+                        f"Puedes acceder al panel de administración en: "
+                        f"https://{result['subdomain']}.psicoadmin.xyz/admin/ "
+                        f"usando tu email y la contraseña temporal proporcionada. "
+                        f"Por favor, cámbiala después del primer acceso."
+                    )
+                }
+            }
+            
+            logger.info(f"✅ Nueva clínica registrada: {result['tenant'].name} ({result['subdomain']})")
+            
+            return Response(response_data, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"❌ Error en registro de tenant: {str(e)}")
+            return Response(
+                {'success': False, 'error': f'Error al crear la clínica: {str(e)}'}, 
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    return Response(
+        {'success': False, 'errors': serializer.errors}, 
+        status=status.HTTP_400_BAD_REQUEST
+    )
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])  # ⭐ Acceso público
+def check_subdomain_availability(request):
+    """
+    Endpoint público para verificar disponibilidad de subdominio.
+    
+    POST /api/public/check-subdomain/
+    Body: {
+        "subdomain": "miclinica"
+    }
+    
+    Response: {
+        "available": true/false,
+        "subdomain": "miclinica",
+        "full_domain": "miclinica.psicoadmin.xyz"
+    }
+    """
+    serializer = SubdomainCheckSerializer(data=request.data)
+    
+    if serializer.is_valid():
+        subdomain = serializer.validated_data['subdomain']
+        domain_name = f"{subdomain}.psicoadmin.xyz"
+        
+        # Verificar disponibilidad
+        domain_exists = Domain.objects.filter(domain=domain_name).exists()
+        schema_exists = Clinic.objects.filter(schema_name=subdomain).exists()
+        
+        available = not (domain_exists or schema_exists)
+        
+        response_data = {
+            'available': available,
+            'subdomain': subdomain,
+            'full_domain': domain_name,
+            'message': '✅ Subdominio disponible' if available else '❌ Subdominio no disponible'
+        }
+        
+        return Response(response_data, status=status.HTTP_200_OK)
+    
+    return Response(
+        {'available': False, 'errors': serializer.errors}, 
+        status=status.HTTP_400_BAD_REQUEST
+    )
