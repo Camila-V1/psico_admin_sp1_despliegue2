@@ -94,7 +94,8 @@ TENANT_APPS = (
 INSTALLED_APPS = list(SHARED_APPS) + [app for app in TENANT_APPS if app not in SHARED_APPS]
 
 MIDDLEWARE = [
-    'django_tenants.middleware.main.TenantMainMiddleware',  # DEBE ser el primero
+    'apps.tenants.hostname_middleware.HostnameDebugMiddleware',  # 🔧 NUEVO: Fuerza hostname correcto desde X-Forwarded-Host
+    'django_tenants.middleware.main.TenantMainMiddleware',  # DEBE ser el segundo (después de hostname fix)
     'apps.auditlog.local.RequestLocalStorageMiddleware',  # Capturar request para logs
     # 'fix_tenant_middleware.FixTenantURLConfMiddleware',  # ❌ DESHABILITADO: Interfiere con django-tenants
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -388,6 +389,12 @@ LOGGING = {
         },
     },
     'loggers': {
+        # Logger para el middleware de hostname (DEBUG)
+        'apps.tenants.hostname_middleware': {
+            'handlers': ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
         # Logger para capturar todo lo que pasa en nuestras 'apps'
         'apps': {
             'handlers': ['console', 'file', 'database'],
