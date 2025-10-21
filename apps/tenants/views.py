@@ -381,22 +381,24 @@ def public_clinic_list(request):
     No requiere autenticación.
     """
     try:
-        # Obtener clínicas activas (excluyendo el schema público)
-        clinics = Clinic.objects.filter(is_active=True).exclude(schema_name='public')
-        
-        clinics_data = []
-        for clinic in clinics:
-            # Obtener el dominio principal
-            domain = Domain.objects.filter(tenant=clinic, is_primary=True).first()
+        # Forzar el uso del schema público para acceder a todas las clínicas
+        with schema_context('public'):
+            # Obtener clínicas activas (excluyendo el schema público)
+            clinics = Clinic.objects.filter(is_active=True).exclude(schema_name='public')
             
-            clinic_data = {
-                'id': clinic.id,
-                'name': clinic.name,
-                'schema_name': clinic.schema_name,
-                'description': clinic.description or '',
-                'domain': domain.domain if domain else None
-            }
-            clinics_data.append(clinic_data)
+            clinics_data = []
+            for clinic in clinics:
+                # Obtener el dominio principal
+                domain = Domain.objects.filter(tenant=clinic, is_primary=True).first()
+                
+                clinic_data = {
+                    'id': clinic.id,
+                    'name': clinic.name,
+                    'schema_name': clinic.schema_name,
+                    'description': clinic.description or '',
+                    'domain': domain.domain if domain else None
+                }
+                clinics_data.append(clinic_data)
         
         return Response({
             'count': len(clinics_data),
@@ -406,6 +408,6 @@ def public_clinic_list(request):
     except Exception as e:
         logger.error(f"Error listando clínicas públicas: {str(e)}")
         return Response(
-            {'error': 'Error al obtener lista de clínicas'}, 
+            {'error': 'Error al obtener lista de clínicas', 'details': str(e)}, 
             status=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
