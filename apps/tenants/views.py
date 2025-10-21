@@ -383,8 +383,8 @@ def public_clinic_list(request):
     try:
         # Forzar el uso del schema público para acceder a todas las clínicas
         with schema_context('public'):
-            # Obtener clínicas activas (excluyendo el schema público)
-            clinics = Clinic.objects.filter(is_active=True).exclude(schema_name='public')
+            # Obtener todas las clínicas (excluyendo el schema público)
+            clinics = Clinic.objects.exclude(schema_name='public')
             
             clinics_data = []
             for clinic in clinics:
@@ -395,7 +395,7 @@ def public_clinic_list(request):
                     'id': clinic.id,
                     'name': clinic.name,
                     'schema_name': clinic.schema_name,
-                    'description': clinic.description or '',
+                    'description': '',  # El modelo no tiene description
                     'domain': domain.domain if domain else None
                 }
                 clinics_data.append(clinic_data)
