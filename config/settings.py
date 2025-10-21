@@ -255,6 +255,11 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://127.0.0.1:5174",
     # Subdominios específicos para desarrollo
+     "https://bienestar-psico.vercel.app",  # Tu deployment de Vercel para Bienestar
+    "https://mindcare-psico.vercel.app",   # Tu deployment de Vercel para Mindcare
+    "http://localhost:3000",               # Desarrollo local
+    "http://localhost:5173", 
+
     "http://bienestar.localhost:5174",
     "http://mindcare.localhost:5174",
     "http://bienestar.localhost:3000",
@@ -269,6 +274,8 @@ CORS_ALLOWED_ORIGIN_REGEXES = [
     r"^http://localhost:\d+$",          # Permite http://localhost:<puerto>
     r"^http://127\.0\.0\.1:\d+$",       # Permite http://127.0.0.1:<puerto>
     r"^https://\w+\.localhost:\d+$",    # Permite https://<cualquier-cosa>.localhost:<puerto>
+    r"^https://.*\.vercel\.app$",
+    r"^https://.*\.psicoadmin\.xyz$",
 ]
 # Asegúrate de que esta línea también esté presente
 CORS_ALLOW_CREDENTIALS = True
@@ -326,6 +333,10 @@ EMAIL_HOST_USER = 'isaelortiz74@gmail.com'
 EMAIL_HOST_PASSWORD = 'jyce eils gnvi vsju' 
 # -----------------------
 
+# Configuración de sesiones
+SESSION_COOKIE_DOMAIN = '.psicoadmin.xyz'  # Compartir cookies entre subdominios
+SESSION_COOKIE_SAMESITE = 'None'  # Permitir cross-site
+SESSION_COOKIE_SECURE = True  # Solo HTTPS
 DEFAULT_FROM_EMAIL = 'Equipo de Psico SAS <isaelortiz74@gmail.com>'
 
 # Asegúrate de que la versión de consola ESTÉ comentada o eliminada:
