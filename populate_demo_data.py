@@ -14,10 +14,9 @@ django.setup()
 from django.contrib.auth import get_user_model
 from django_tenants.utils import schema_context
 from apps.tenants.models import Clinic
-from apps.users.models import CustomUser
+from apps.users.models import CustomUser, PatientProfile
 from apps.professionals.models import ProfessionalProfile, Specialization, WorkingHours
 from apps.appointments.models import Appointment
-from apps.clinical_history.models import Patient
 
 User = get_user_model()
 
@@ -198,26 +197,28 @@ def create_demo_data_for_tenant(tenant_name, data):
                     'first_name': patient_data['first_name'],
                     'last_name': patient_data['last_name'],
                     'phone': patient_data['phone'],
-                    'role': 'patient',
+                    'user_type': 'patient',
+                    'date_of_birth': datetime.now().date() - timedelta(days=365*30),  # 30 años
+                    'address': 'Dirección de ejemplo',
                 }
             )
             if created:
                 user.set_password('demo123')
                 user.save()
             
-            # Crear paciente
-            patient, created = Patient.objects.get_or_create(
+            # Crear perfil de paciente
+            profile, profile_created = PatientProfile.objects.get_or_create(
                 user=user,
                 defaults={
-                    'date_of_birth': datetime.now().date() - timedelta(days=365*30),  # 30 aÃ±os
-                    'address': 'DirecciÃ³n de ejemplo',
-                    'emergency_contact': patient_data['phone'],
+                    'emergency_contact_phone': patient_data['phone'],
+                    'emergency_contact_name': 'Contacto de emergencia',
+                    'emergency_contact_relationship': 'Familiar',
                 }
             )
             
-            patients.append(patient)
-            status = "âœ… Creado" if created else "â„¹ï¸ Ya existe"
-            print(f"  {status}: {patient.user.get_full_name()}")
+            patients.append(user)
+            status = "✅ Creado" if created else "ℹ️ Ya existe"
+            print(f"  {status}: {user.get_full_name()}")
         
         # 4. Crear citas de ejemplo
         print("\nðŸ“… Creando citas de ejemplo...")
@@ -239,7 +240,7 @@ def create_demo_data_for_tenant(tenant_name, data):
                 appointment_time = time(10 + j*2, 0)  # 10:00, 12:00, etc.
                 
                 appointment, created = Appointment.objects.get_or_create(
-                    patient=patient.user,
+                    patient=patient,
                     psychologist=professional.user,
                     appointment_date=appointment_date.date(),
                     start_time=appointment_time,
@@ -259,13 +260,13 @@ def create_demo_data_for_tenant(tenant_name, data):
         print(f"\n✅ Total de citas creadas: {appointment_count}")
         
         # Resumen
-        print(f"\nðŸ“Š RESUMEN - {clinic.name}:")
-        print(f"  ðŸ‘¥ Usuarios: {CustomUser.objects.count()}")
-        print(f"  ðŸ‘¨â€âš•ï¸ Profesionales: {ProfessionalProfile.objects.count()}")
-        print(f"  ðŸ§‘â€ðŸ¤â€ðŸ§‘ Pacientes: {Patient.objects.count()}")
-        print(f"  ðŸ“š Especialidades: {Specialization.objects.count()}")
-        print(f"  ðŸ“… Citas: {Appointment.objects.count()}")
-        print(f"  â° Horarios: {WorkingHours.objects.count()}")
+        print(f"\n📊 RESUMEN - {clinic.name}:")
+        print(f"  👥 Usuarios: {CustomUser.objects.count()}")
+        print(f"  👨‍⚕️ Profesionales: {ProfessionalProfile.objects.count()}")
+        print(f"  🧑‍🤝‍🧑 Pacientes: {CustomUser.objects.filter(user_type='patient').count()}")
+        print(f"  📚 Especialidades: {Specialization.objects.count()}")
+        print(f"  📅 Citas: {Appointment.objects.count()}")
+        print(f"  ⏰ Horarios: {WorkingHours.objects.count()}")
 
 def main():
     print("ðŸš€ Iniciando poblaciÃ³n de datos de demostraciÃ³n...")
