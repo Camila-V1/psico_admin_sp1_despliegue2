@@ -1,6 +1,7 @@
 # apps/professionals/views.py
 
 import logging
+import uuid
 from rest_framework import status, permissions, generics
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
@@ -16,6 +17,12 @@ from .serializers import (
     ReviewSerializer
 )
 from apps.appointments.models import Appointment
+from django.conf import settings
+from supabase import create_client, Client
+from rest_framework.parsers import MultiPartParser, FormParser
+from apps.appointments.views import IsPsychologist
+from .models import VerificationDocument
+from .serializers import VerificationDocumentSerializer
 
 logger = logging.getLogger(__name__)
 User = get_user_model()
@@ -286,3 +293,83 @@ def professional_reviews(request, professional_id):
         return Response({
             'error': 'Profesional no encontrado'
         }, status=status.HTTP_404_NOT_FOUND)
+
+# apps/professionals/views.py
+# ... (después de la función professional_reviews) ...
+
+class VerificationDocumentUploadView(generics.CreateAPIView):
+    """
+    Endpoint para que un psicólogo suba sus documentos de verificación
+    (Títulos, Cédula, etc.) para que un admin los apruebe.
+    """
+    serializer_class = VerificationDocumentSerializer
+    permission_classes = [permissions.IsAuthenticated, IsPsychologist]
+    parser_classes = [MultiPartParser, FormParser] # Para aceptar archivos
+
+    def perform_create(self, serializer):
+        # 1. Obtener el archivo y los datos
+        file = self.request.data.get('file')
+        description = self.request.data.get('description', 'Sin descripción')
+
+        if not file:
+            raise serializers.ValidationError({'file': 'No se proporcionó ningún archivo.'})
+
+        professional_profile = self.request.user.professional_profile
+
+        try:
+            # 2. Conectar con Supabase
+            supabase: Client = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
+            bucket_name = settings.SUPABASE_BUCKET_NAME
+
+            # 3. Crear un nombre de archivo único
+            file_ext = file.name.split('.')[-1]
+            file_name = f"{professional_profile.id}_{uuid.uuid4()}.{file_ext}"
+            file_path = f"verificaciones/{file_name}"
+
+            # 4. Subir el archivo a Supabase
+            supabase.storage.from_(bucket_name).upload(
+                path=file_path,
+                file=file.read(),
+                file_options={"content-type": file.content_type}
+            )
+
+            # 5. Obtener la URL pública del archivo
+            file_url = supabase.storage.from_(bucket_name).get_public_url(file_path)
+
+            # 6. Guardar en nuestra base de datos
+            serializer.save(
+                professional=professional_profile,
+                description=description,
+                file_url=file_url,
+                status='pending'
+            )
+            logger.info(f"✅ Documento de verificación subido por {professional_profile.user.email}")
+
+        except Exception as e:
+            logger.error(f"❌ Error al subir a Supabase: {e}")
+            raise serializers.ValidationError(f"Error del servidor de archivos: {e}")
+
+# apps/professionals/views.py
+# ... (después de professional_reviews) ...
+
+@api_view(['GET'])
+@permission_classes([IsPsychologist]) # Solo psicólogos
+def list_colleagues(request):
+    """
+    NUEVO: Endpoint para que un psicólogo vea a todos los
+    otros colegas activos y sus especialidades para derivar.
+    """
+    try:
+        # Obtenemos todos los perfiles, EXCLUYENDO al propio usuario
+        colleagues = ProfessionalProfile.objects.filter(
+            is_active=True,
+            profile_completed=True
+        ).exclude(user=request.user)
+
+        # Reutilizamos el serializer público que ya tenías
+        serializer = ProfessionalPublicSerializer(colleagues, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        logger.error(f"Error al listar colegas: {e}")
+        return Response({"error": "No se pudo obtener la lista de colegas."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

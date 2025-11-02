@@ -51,7 +51,6 @@ def register_user(request):
 
 # ... (otras importaciones y vistas no cambian) ...
 
-# 👇 REEMPLAZA ESTA FUNCIÓN COMPLETA 👇
 @api_view(['POST'])
 @authentication_classes([])
 @permission_classes([permissions.AllowAny])
@@ -61,20 +60,15 @@ def login_user(request):
     logger.debug(f"   request.data: {request.data}")
     
     serializer = UserLoginSerializer(data=request.data, context={'request': request})
+    
     if serializer.is_valid():
         user = serializer.validated_data['user']
         logger.info(f"✅ [Login] Validación exitosa - Usuario: {user.email} (ID: {user.id})")
         
-        # --- INICIO DE LA CORRECCIÓN ---
-        # Importamos el modelo PublicUser para poder comprobar de qué tipo es el usuario
+        # --- (Tu lógica para Admin Global no cambia) ---
         from apps.tenants.models import PublicUser
-
-        # Si el usuario autenticado es una instancia de PublicUser, es el admin global.
         if isinstance(user, PublicUser):
             logger.info(f"👑 [Login] Admin Global detectado - Email: {user.email}")
-            # Para el admin global, no generamos un token de API.
-            # Su autenticación se maneja por sesiones de Django para el /admin/.
-            # Devolvemos una respuesta especial para que el frontend sepa cómo actuar.
             return Response({
                 'message': 'Sesión de administrador global iniciada exitosamente.',
                 'user': {
@@ -82,15 +76,30 @@ def login_user(request):
                     'email': user.email,
                     'first_name': user.first_name,
                     'last_name': user.last_name,
-                    'user_type': 'superuser',  # Un tipo especial para que el frontend lo reconozca
+                    'user_type': 'superuser',
+                    'has_completed_triage': True # Los admins no hacen triaje
                 },
-                'token': 'global-admin-session' # Enviamos un token simulado
+                'token': 'global-admin-session'
             }, status=status.HTTP_200_OK)
-        # --- FIN DE LA CORRECCIÓN ---
+        # --- (Fin de la lógica de Admin Global) ---
 
-        # Si no es un PublicUser, es un CustomUser de una clínica.
         logger.info(f"👤 [Login] Usuario de clínica detectado - Tipo: {user.user_type}")
-        # Continuamos con la lógica original de crear un token.
+        
+        # --- 👇 INICIO DE LA MODIFICACIÓN (CU-21) 👇 ---
+        
+        has_completed_triage = False
+        if user.user_type == 'patient':
+            # Verificamos si el 'OneToOneField' (related_name='initial_triage') existe.
+            # ¡Esto es súper eficiente!
+            has_completed_triage = hasattr(user, 'initial_triage')
+            logger.info(f"   Verificando triaje para paciente: {has_completed_triage}")
+        else:
+            # Admins y Profesionales no necesitan triaje, 
+            # así que marcamos True para que el frontend no los bloquee.
+            has_completed_triage = True
+            
+        # --- 👆 FIN DE LA MODIFICACIÓN (CU-21) 👆 ---
+            
         token, created = Token.objects.get_or_create(user=user)
         logger.debug(f"   Token generado: {token.key[:10]}... (nuevo: {created})")
         
@@ -102,11 +111,12 @@ def login_user(request):
                 'first_name': user.first_name,
                 'last_name': user.last_name,
                 'user_type': user.user_type,
+                # --- 👇 ¡EL NUEVO CAMPO QUE EL FRONTEND NECESITA! 👇 ---
+                'has_completed_triage': has_completed_triage
             },
             'token': token.key
         }, status=status.HTTP_200_OK)
         
-    # 🔍 DEBUG: Si la validación falla, logueamos los errores
     logger.error(f"❌ [Login] Validación fallida para email: {request.data.get('email')}")
     logger.error(f"   Errores del serializer: {serializer.errors}")
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

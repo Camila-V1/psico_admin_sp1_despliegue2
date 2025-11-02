@@ -1,7 +1,7 @@
 # apps/clinical_history/serializers.py
 
 from rest_framework import serializers
-from .models import SessionNote, ClinicalDocument, ClinicalHistory  # <-- 1. IMPORTA EL NUEVO MODELO
+from .models import SessionNote, ClinicalDocument, ClinicalHistory, InitialTriage, MoodJournal  # <-- 1. IMPORTA EL NUEVO MODELO
 from apps.users.models import CustomUser
 
 class SessionNoteSerializer(serializers.ModelSerializer):
@@ -104,3 +104,120 @@ class ClinicalHistorySerializer(serializers.ModelSerializer):
         ]
         # Hacemos que ciertos campos sean de solo lectura para proteger los datos
         read_only_fields = ['patient', 'created_by', 'created_at', 'updated_at']
+
+# apps/clinical_history/serializers.py
+# ... (después de la clase ClinicalHistorySerializer) ...
+
+class InitialTriageSubmitSerializer(serializers.ModelSerializer):
+    """
+    Serializer para recibir las respuestas del triaje.
+    """
+    # El frontend debe enviar un JSON con este formato:
+    # { "answers": { "nodo1": "ansioso", "nodo3": "si_constantemente" } }
+    answers = serializers.JSONField(write_only=True)
+
+    class Meta:
+        model = InitialTriage
+        fields = ['patient', 'answers', 'pre_diagnosis', 'recommendation', 'created_at']
+        read_only_fields = ['patient', 'pre_diagnosis', 'recommendation', 'created_at']
+
+    def create(self, validated_data):
+        # Aquí vinculamos la lógica del árbol de decisiones
+        answers = validated_data.get('answers', {})
+        patient = self.context['request'].user
+
+        # 1. Procesar las respuestas
+        pre_diagnosis, recommendation = self._process_triage_logic(answers)
+
+        # 2. Guardar el resultado
+        triage, created = InitialTriage.objects.update_or_create(
+            patient=patient,
+            defaults={
+                'answers': answers,
+                'pre_diagnosis': pre_diagnosis,
+                'recommendation': recommendation
+            }
+        )
+        return triage
+
+    def _process_triage_logic(self, answers):
+        """
+        Implementación de la lógica del árbol de triaje (CU-21).
+        """
+        nodo1 = answers.get('nodo1')
+
+        if nodo1 == 'triste_o_sin_ganas':
+            # Nodo 2 (Depresión)
+            nodo2 = answers.get('nodo2')
+            if nodo2 == 'casi_todos_los_dias':
+                return "Posible Depresión Moderada/Grave", "Se sugiere una evaluación profunda para confirmar el diagnóstico y comenzar un plan de apoyo."
+            elif nodo2 == 'algunos_dias':
+                return "Posible Depresión Leve", "Se sugiere una evaluación con un profesional para explorar estos síntomas."
+
+        elif nodo1 == 'ansioso_preocupado_o_con_miedo':
+            # Nodo 3 (Ansiedad)
+            nodo3 = answers.get('nodo3')
+            if nodo3 == 'si_constantemente':
+                return "Posible Ansiedad Generalizada", "Se sugiere una evaluación más profunda con un profesional para confirmar el diagnóstico."
+            elif nodo3 == 'a_veces_en_publico':
+                return "Posible Ansiedad Social", "Un profesional puede ayudarte a desarrollar herramientas para manejar estas situaciones."
+
+        elif nodo1 == 'irritable_o_dificultad_dormir':
+            # Nodo 4 (Estrés)
+            nodo4 = answers.get('nodo4')
+            if nodo4 == 'trabajo_o_estudios':
+                return "Posible Estrés Laboral/Académico", "Es importante desarrollar estrategias de manejo del estrés. Un profesional puede ayudarte."
+            elif nodo4 == 'familia_o_relaciones':
+                return "Posible Estrés Familiar", "La terapia puede ofrecer un espacio para gestionar estos conflictos."
+
+        elif nodo1 == 'conflictos_personales_o_pareja':
+            # Nodo 5 (Relaciones)
+            nodo5 = answers.get('nodo5')
+            if nodo5 == 'si_con_frecuencia':
+                return "Posibles Conflictos Interpersonales", "La terapia de pareja o individual puede ser muy beneficiosa."
+
+        elif nodo1 == 'consumo_alcohol_o_sustancias':
+            # Nodo 6 (Adicciones)
+            nodo6 = answers.get('nodo6')
+            if nodo6 == 'si_pierdo_control':
+                return "Posible Trastorno por Consumo", "Es fundamental buscar ayuda profesional especializada para evaluar la situación."
+
+        # Por defecto o si es 'bien_sin_cambios'
+        return "Sin Signos Relevantes Detectados", "No se detectan signos de alarma inmediatos, pero siempre puedes hablar con un profesional si lo necesitas."
+
+class MoodJournalSerializer(serializers.ModelSerializer):
+    """
+    Serializer para crear y listar entradas del diario de ánimo.
+    """
+    # Obtenemos el nombre legible (ej: "Feliz")
+    mood_display = serializers.CharField(source='get_mood_display', read_only=True)
+
+    class Meta:
+        model = MoodJournal
+        fields = [
+            'id', 
+            'patient', 
+            'date', 
+            'mood', 
+            'mood_display',
+            'notes', 
+            'created_at'
+        ]
+        read_only_fields = ['id', 'patient', 'date', 'mood_display', 'created_at']
+
+    def validate(self, data):
+        # Verificación extra para dar un error amigable
+        # (Aunque la BD también lo previene con unique_together)
+        from datetime import date
+        request = self.context.get('request')
+        if not request or not hasattr(request, 'user'):
+            raise serializers.ValidationError("Contexto de request no válido")
+
+        today = date.today()
+        patient = request.user
+
+        # Comprueba si ya existe una entrada para este paciente HOY
+        if MoodJournal.objects.filter(patient=patient, date=today).exists():
+            raise serializers.ValidationError("Ya has registrado tu estado de ánimo hoy.")
+
+        return data

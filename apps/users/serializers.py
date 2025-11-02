@@ -4,6 +4,7 @@ from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import PatientProfile
 from datetime import date
+from apps.clinical_history.models import InitialTriage
 
 User = get_user_model()
 
@@ -43,16 +44,39 @@ class PatientProfileSerializer(serializers.ModelSerializer):
     """
     Serializer para perfil de paciente del centro de salud mental - CU-05
     """
+    pre_diagnosis = serializers.SerializerMethodField()
+    recommendation = serializers.SerializerMethodField()
+
     class Meta:
         model = PatientProfile
         fields = (
             'emergency_contact_name', 'emergency_contact_phone', 
             'emergency_contact_relationship', 'occupation', 
             'education_level', 'initial_reason', 'how_found_us',
-            'profile_completed'
+            'profile_completed',
+            'pre_diagnosis', 'recommendation'
         )
-        read_only_fields = ('profile_completed',)
+        read_only_fields = ('profile_completed','pre_diagnosis', 'recommendation')
     
+    def get_pre_diagnosis(self, obj):
+        """Obtiene el pre-diagnóstico del triaje del paciente."""
+        try:
+            # obj es el PatientProfile, obj.user es el Paciente
+            return obj.user.initial_triage.pre_diagnosis
+        except InitialTriage.DoesNotExist:
+            return None
+        except AttributeError: # Si 'initial_triage' no existe
+            return None
+
+    def get_recommendation(self, obj):
+        """Obtiene la recomendación del triaje del paciente."""
+        try:
+            return obj.user.initial_triage.recommendation
+        except InitialTriage.DoesNotExist:
+            return None
+        except AttributeError:
+            return None
+            
     def validate(self, attrs):
         """Marcar perfil como completo si tiene los datos básicos"""
         if (attrs.get('emergency_contact_name') and 

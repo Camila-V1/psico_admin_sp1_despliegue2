@@ -4,6 +4,7 @@ from django.db import models
 from django.conf import settings
 from apps.appointments.models import Appointment
 from .storage import ClinicalDocumentS3Storage
+from datetime import date
 
 class SessionNote(models.Model):
     """
@@ -54,7 +55,7 @@ class ClinicalDocument(models.Model):
     # El archivo en S3
     file = models.FileField(
         upload_to='clinical_documents/%Y/%m/%d/',
-        storage=ClinicalDocumentS3Storage()
+        storage='apps.clinical_history.storage.ClinicalDocumentS3Storage'
     )
     
     description = models.CharField(max_length=255, help_text="Descripción o título del documento.")
@@ -133,3 +134,92 @@ class ClinicalHistory(models.Model):
 
     def __str__(self):
         return f"Historial Clínico de {self.patient.get_full_name()}"
+
+# apps/clinical_history/models.py
+# ... (después de la clase ClinicalHistory) ...
+
+class InitialTriage(models.Model):
+    """
+    Modelo para almacenar los resultados del triaje inicial (CU-21)
+    de un paciente.
+    """
+    patient = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='initial_triage',
+        limit_choices_to={'user_type': 'patient'},
+        primary_key=True # Cada paciente solo tiene un triaje inicial
+    )
+    
+    # Almacenamos todas las respuestas del formulario
+    answers = models.JSONField(
+        default=dict,
+        help_text="JSON con las preguntas y respuestas del árbol de triaje."
+    )
+    
+    # El resultado final y la recomendación
+    pre_diagnosis = models.CharField(
+        max_length=255,
+        blank=True,
+        help_text="Diagnóstico preliminar basado en el triaje."
+    )
+    recommendation = models.TextField(
+        blank=True,
+        help_text="Recomendación generada por el sistema."
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Triaje Inicial'
+        verbose_name_plural = 'Triajes Iniciales'
+
+    def __str__(self):
+        return f"Triaje de {self.patient.get_full_name()} - {self.pre_diagnosis}"
+
+
+class MoodJournal(models.Model):
+    """
+    Modelo para el Diario de Estado de Ánimo (CU-41).
+    Registra una entrada de ánimo por paciente, por día.
+    """
+    MOOD_CHOICES = [
+        ('feliz', 'Feliz'),
+        ('triste', 'Triste'),
+        ('ansioso', 'Ansioso/a'),
+        ('enojado', 'Enojado/a'),
+        ('neutral', 'Neutral'),
+        ('cansado', 'Cansado/a'),
+    ]
+
+    patient = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name='mood_journals',
+        limit_choices_to={'user_type': 'patient'}
+    )
+    
+    # Usamos date.today para registrar el día
+    date = models.DateField(default=date.today)
+    
+    mood = models.CharField(max_length=20, choices=MOOD_CHOICES)
+    
+    notes = models.TextField(
+        blank=True, 
+        null=True,
+        help_text="Notas adicionales sobre el estado de ánimo."
+    )
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-date']
+        verbose_name = 'Entrada de Ánimo'
+        verbose_name_plural = 'Diario de Ánimos'
+        
+        # --- ¡ESTA ES LA CLAVE! ---
+        # Asegura que un paciente solo pueda tener UNA entrada por día.
+        unique_together = ('patient', 'date')
+
+    def __str__(self):
+        return f"{self.patient.get_full_name()} - {self.date}: {self.get_mood_display()}"

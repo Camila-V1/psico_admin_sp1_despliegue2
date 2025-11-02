@@ -189,3 +189,41 @@ class Review(models.Model):
         professional = self.professional
         super().delete(*args, **kwargs)
         professional.update_rating()
+
+class VerificationDocument(models.Model):
+    """
+    Documentos subidos por un profesional para verificar su perfil.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente'),
+        ('approved', 'Aprobado'),
+        ('rejected', 'Rechazado'),
+    ]
+
+    professional = models.ForeignKey(
+        ProfessionalProfile,
+        on_delete=models.CASCADE,
+        related_name='verification_documents'
+    )
+    description = models.CharField(max_length=255, blank=True)
+    
+    # Usamos un TextField para guardar la URL pública de Supabase
+    file_url = models.TextField() 
+    
+    status = models.CharField(
+        max_length=10, 
+        choices=STATUS_CHOICES, 
+        default='pending'
+    )
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+    
+    # Campo opcional para que el admin deje notas
+    admin_notes = models.TextField(blank=True) 
+
+    class Meta:
+        ordering = ['-uploaded_at']
+        verbose_name = 'Documento de Verificación'
+        verbose_name_plural = 'Documentos de Verificación'
+
+    def __str__(self):
+        return f"Documento de {self.professional.user.get_full_name()} ({self.status})"

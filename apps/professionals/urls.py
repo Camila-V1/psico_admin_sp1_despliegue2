@@ -4,8 +4,12 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('colleagues/', views.list_colleagues, name='list-colleagues'),
+    
     # CU-06: Completar Perfil Profesional
     path('profile/', views.professional_profile_detail, name='professional_profile'),
+
+    path('upload-verification/', views.VerificationDocumentUploadView.as_view(), name='upload-verification'),
     
     # CU-08: Buscar y Filtrar Profesionales
     path('', views.list_professionals, name='list_professionals'),

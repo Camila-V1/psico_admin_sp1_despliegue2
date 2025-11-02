@@ -340,3 +340,19 @@ class AppointmentUpdateSerializer(serializers.ModelSerializer):
                 )
         
         return value
+
+class ReferralCreateSerializer(serializers.Serializer):
+    """
+    Serializer simple para crear una derivación.
+    Valida el ID del psicólogo y el motivo.
+    """
+    referred_psychologist_id = serializers.IntegerField(required=True)
+    reason = serializers.CharField(required=True, max_length=1000)
+
+    def validate_referred_psychologist_id(self, value):
+        # Validamos que el ID corresponda a un psicólogo activo
+        try:
+            user = User.objects.get(id=value, user_type='professional', is_active=True)
+        except User.DoesNotExist:
+            raise serializers.ValidationError("El psicólogo seleccionado no es válido o está inactivo.")
+        return value

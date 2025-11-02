@@ -5,10 +5,17 @@ from .views import (
     CreateCheckoutSessionView, 
     StripeWebhookView, 
     PaymentStatusView,
-    GetStripePublicKeyView
+    GetStripePublicKeyView,
+    PaymentHistoryListView,
+    ConfirmPaymentView
 )
 
 urlpatterns = [
+
+    path('my-payments/', PaymentHistoryListView.as_view(), name='my-payment-history'),
+
+    path('confirm-payment/', ConfirmPaymentView.as_view(), name='confirm-payment'),
+
     # Crear sesión de pago
     path('create-checkout-session/', CreateCheckoutSessionView.as_view(), name='create-checkout-session'),
     

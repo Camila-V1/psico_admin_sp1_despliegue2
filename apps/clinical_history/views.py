@@ -8,10 +8,12 @@ from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from django.http import FileResponse, Http404
 from django.conf import settings
-from .models import SessionNote, ClinicalDocument, ClinicalHistory  # <-- IMPORTA ClinicalHistory
-from .serializers import SessionNoteSerializer, ClinicalDocumentSerializer, PsychologistPatientSerializer, ClinicalHistorySerializer  # <-- IMPORTA ClinicalHistorySerializer
+from .models import SessionNote, ClinicalDocument, ClinicalHistory, InitialTriage, MoodJournal  # <-- IMPORTA ClinicalHistory
+from .serializers import SessionNoteSerializer, ClinicalDocumentSerializer, PsychologistPatientSerializer, ClinicalHistorySerializer, InitialTriageSubmitSerializer, MoodJournalSerializer  # <-- IMPORTA ClinicalHistorySerializer
 from apps.appointments.models import Appointment
 from apps.users.models import CustomUser
+from datetime import date
+
 
 logger = logging.getLogger(__name__)
 
@@ -279,3 +281,81 @@ class DownloadDocumentView(generics.RetrieveAPIView):
         except Exception as e:
             logger.error(f"❌ [Download] Error al descargar desde S3: {e}")
             raise Http404(f"Archivo no encontrado en S3: {str(e)}")
+
+# apps/clinical_history/views.py
+# ... (después de la clase DownloadDocumentView) ...
+
+class IsPatient(permissions.BasePermission):
+    """Permiso para asegurar que el usuario sea un paciente."""
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and request.user.user_type == 'patient'
+
+class InitialTriageView(generics.GenericAPIView):
+    """
+    Endpoint para que un paciente envíe (POST) o consulte (GET)
+    su triaje inicial (CU-21).
+    """
+    permission_classes = [IsPatient]
+    serializer_class = InitialTriageSubmitSerializer
+
+    def get(self, request, *args, **kwargs):
+        """Obtener el resultado del triaje si ya existe"""
+        try:
+            triage = InitialTriage.objects.get(patient=request.user)
+            # Usamos el serializer para mostrar los datos (sin 'answers')
+            serializer = self.get_serializer(triage)
+            return Response(serializer.data)
+        except InitialTriage.DoesNotExist:
+            return Response(
+                {"error": "El paciente aún no ha completado el triaje inicial."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+    def post(self, request, *args, **kwargs):
+        """Enviar las respuestas del triaje"""
+        serializer = self.get_serializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            triage_result = serializer.save()
+            # Devolvemos el objeto completo (incluyendo el diagnóstico)
+            return Response(
+                InitialTriageSubmitSerializer(triage_result).data,
+                status=status.HTTP_201_CREATED
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class MoodJournalView(generics.ListCreateAPIView):
+    """
+    Endpoint para que un paciente CREE (POST) su entrada de ánimo del día
+    o VEA (GET) su historial de entradas.
+    """
+    serializer_class = MoodJournalSerializer
+    permission_classes = [IsPatient] # Reutilizamos el permiso de Paciente
+
+    def get_queryset(self):
+        """Sobrescribimos para devolver solo el historial del paciente logueado."""
+        return MoodJournal.objects.filter(patient=self.request.user)
+
+    def perform_create(self, serializer):
+        """Sobrescribimos para asignar al paciente y la fecha automáticamente."""
+        serializer.save(patient=self.request.user, date=date.today())
+
+
+class TodayMoodJournalView(generics.RetrieveAPIView):
+    """
+    Endpoint especial para que el frontend verifique (GET)
+    si el paciente ya registró su ánimo HOY.
+    """
+    serializer_class = MoodJournalSerializer
+    permission_classes = [IsPatient]
+
+    def get_object(self):
+        """
+        Intenta obtener el registro de hoy.
+        Si no lo encuentra, lanza un 404, que es lo que el frontend
+        usará para saber que debe mostrar el popup.
+        """
+        return get_object_or_404(
+            MoodJournal, 
+            patient=self.request.user, 
+            date=date.today()
+        )

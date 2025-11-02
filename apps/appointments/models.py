@@ -210,3 +210,52 @@ class TimeSlot(models.Model):
     
     def __str__(self):
         return f"{self.psychologist.get_full_name()} - {self.date} {self.start_time}-{self.end_time}"
+
+
+class Referral(models.Model):
+    """
+    Modelo para gestionar la derivación de una cita de un 
+    profesional a otro.
+    """
+    STATUS_CHOICES = [
+        ('pending', 'Pendiente'),
+        ('accepted', 'Aceptada'),
+        ('rejected', 'Rechazada'),
+    ]
+
+    # La cita que se está derivando
+    appointment = models.OneToOneField(
+        Appointment,
+        on_delete=models.CASCADE,
+        related_name='referral'
+    )
+    
+    # Quién la deriva
+    referring_psychologist = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='referrals_made',
+        limit_choices_to={'user_type': 'professional'}
+    )
+    
+    # A quién se deriva
+    referred_psychologist = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='referrals_received',
+        limit_choices_to={'user_type': 'professional'}
+    )
+    
+    reason = models.TextField(help_text="Motivo de la derivación.")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Derivación'
+        verbose_name_plural = 'Derivaciones'
+
+    def __str__(self):
+        return f"Derivación de Cita {self.appointment_id} a {self.referred_psychologist.get_full_name()}"

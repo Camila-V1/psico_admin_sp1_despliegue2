@@ -37,7 +37,7 @@ if RENDER:
     USE_X_FORWARDED_HOST = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 else:
-    ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1,bienestar.localhost,mindcare.localhost,*.localhost,*.127.0.0.1.nip.io", cast=Csv())
+    ALLOWED_HOSTS = config("ALLOWED_HOSTS", default="localhost,127.0.0.1,public.localhost,bienestar.localhost,mindcare.localhost,*.localhost,*.127.0.0.1.nip.io", cast=Csv())
 
 # Application definition
 
@@ -443,3 +443,14 @@ AWS_S3_OBJECT_PARAMETERS = {
 
 # Usar S3 en producción, filesystem local en desarrollo
 USE_S3_STORAGE = config("USE_S3_STORAGE", default=not DEBUG, cast=bool)
+
+# config/settings.py
+
+# ... (al final, después de STRIPE y AWS) ...
+
+# ---------------------------------------------------------------
+# CONFIGURACIÓN DE SUPABASE PARA ALMACENAMIENTO
+# ---------------------------------------------------------------
+SUPABASE_URL = config("SUPABASE_URL", default="https://xefqugptdzubukeowcnj.supabase.co")
+SUPABASE_KEY = config("SUPABASE_KEY", default="eyJhbG...sr_o") # Tu clave larga
+SUPABASE_BUCKET_NAME = config("SUPABASE_BUCKET_NAME", default="documentos-verificacion")

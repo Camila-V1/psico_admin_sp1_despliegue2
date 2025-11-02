@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
-from .models import ProfessionalProfile, Specialization, WorkingHours, Review
+from .models import ProfessionalProfile, Specialization, WorkingHours, Review, VerificationDocument
 
 User = get_user_model()
 
@@ -127,3 +127,13 @@ class ReviewSerializer(serializers.ModelSerializer):
             'created_at'
         ]
         read_only_fields = ['patient', 'patient_name', 'professional']
+
+class VerificationDocumentSerializer(serializers.ModelSerializer):
+    """
+    Serializer para subir documentos de verificación.
+    El archivo se maneja en la vista, aquí solo validamos la descripción.
+    """
+    class Meta:
+        model = VerificationDocument
+        fields = ['id', 'professional', 'description', 'file_url', 'status', 'uploaded_at']
+        read_only_fields = ['id', 'professional', 'file_url', 'status', 'uploaded_at']

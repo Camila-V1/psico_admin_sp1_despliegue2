@@ -15,7 +15,8 @@ from .serializers import (
     AppointmentUpdateSerializer,
     PsychologistAvailabilitySerializer,
     TimeSlotSerializer,
-    AvailablePsychologistSerializer
+    AvailablePsychologistSerializer,
+    ReferralCreateSerializer
 )
 
 User = get_user_model()
@@ -220,6 +221,65 @@ class AppointmentViewSet(viewsets.ModelViewSet):
         
         serializer = AppointmentSerializer(appointments, many=True)
         return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='refer')
+    def refer_appointment(self, request, pk=None):
+        """
+        NUEVO: Endpoint para derivar esta cita a otro colega.
+        """
+        appointment = self.get_object()
+
+        # 1. Validar permisos
+        if request.user != appointment.psychologist:
+            return Response(
+                {'error': 'Solo el psicólogo de la cita puede derivarla.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        # 2. Validar que no haya sido derivada ya
+        if hasattr(appointment, 'referral'):
+            return Response(
+                {'error': 'Esta cita ya ha sido derivada.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # 3. Validar los datos de entrada
+        serializer = ReferralCreateSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+        data = serializer.validated_data
+
+        try:
+            referred_psychologist = User.objects.get(id=data['referred_psychologist_id'])
+
+            # 4. Crear la derivación
+            Referral.objects.create(
+                appointment=appointment,
+                referring_psychologist=request.user,
+                referred_psychologist=referred_psychologist,
+                reason=data['reason'],
+                status='pending'
+            )
+
+            # 5. Actualizar la cita original (opcional, pero recomendado)
+            # La marcamos como 'cancelled' para que libere el horario
+            appointment.status = 'cancelled'
+            appointment.notes += f"\n\n[Derivada a {referred_psychologist.get_full_name()} por: {data['reason']}]"
+            appointment.save()
+
+            logger.info(f"Cita {appointment.id} derivada a {referred_psychologist.email} por {request.user.email}")
+
+            return Response(
+                {'status': 'Cita derivada exitosamente.'},
+                status=status.HTTP_201_CREATED
+            )
+
+        except User.DoesNotExist:
+            return Response({'error': 'Psicólogo no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            logger.error(f"Error al crear derivación: {e}")
+            return Response({'error': 'Error interno al crear la derivación.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 # apps/appointments/views.py

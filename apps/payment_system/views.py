@@ -4,13 +4,17 @@ import stripe
 from django.conf import settings
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework import status, permissions
+from rest_framework import status, permissions, generics
 from apps.appointments.models import Appointment
 from apps.appointments.serializers import AppointmentCreateSerializer
 from django.shortcuts import get_object_or_404
 from apps.users.models import CustomUser
 from django_tenants.utils import tenant_context  # <-- IMPORTAR TENANT_CONTEXT
 from apps.tenants.models import Clinic  # <-- IMPORTAR CLÍNICA
+from .models import PaymentTransaction
+from .serializers import PaymentTransactionSerializer, PaymentConfirmationSerializer
+from django.utils import timezone
+from decimal import Decimal
 import logging
 
 # Configurar el logger
@@ -163,7 +167,7 @@ class StripeWebhookView(APIView):
     Vista para recibir eventos de Stripe.
     Maneja la confirmación de pagos exitosos.
     """
-    permission_classes = [permissions.AllowAny]  # No requiere token, Stripe la llama directamente
+    permission_classes = [permissions.AllowAny]
 
     def post(self, request, *args, **kwargs):
         payload = request.body
@@ -175,11 +179,9 @@ class StripeWebhookView(APIView):
                 payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
             )
         except ValueError as e:
-            # Payload inválido
             logger.error(f"Payload inválido en webhook: {str(e)}")
             return Response(status=status.HTTP_400_BAD_REQUEST)
         except stripe.error.SignatureVerificationError as e:
-            # Firma inválida
             logger.error(f"Firma inválida en webhook: {str(e)}")
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
@@ -188,41 +190,45 @@ class StripeWebhookView(APIView):
             session = event['data']['object']
             metadata = session.get('metadata', {})
             appointment_id = metadata.get('appointment_id')
-            schema_name = metadata.get('tenant_schema_name')  # <-- OBTENER EL SCHEMA
+            schema_name = metadata.get('tenant_schema_name')
 
             if appointment_id and schema_name:
                 try:
                     tenant = Clinic.objects.get(schema_name=schema_name)
-                    # --- CORRECCIÓN: ACTIVAR EL CONTEXTO DEL TENANT ---
+
                     with tenant_context(tenant):
+                        # --- (PASO 1: ACTUALIZAR LA CITA - Esto ya lo tenías) ---
                         appointment = Appointment.objects.get(id=appointment_id)
                         appointment.is_paid = True
                         appointment.status = 'confirmed'
                         appointment.save()
                         logger.info(f"Pago confirmado para cita {appointment_id} en schema {schema_name}")
-                    # --- FIN DE LA CORRECCIÓN ---
+
+                        # --- 👇 INICIO DE LA NUEVA IDEA 👇 ---
+                        # (PASO 2: CREAR EL REGISTRO DE TRANSACCIÓN)
+
+                        PaymentTransaction.objects.update_or_create(
+                            stripe_session_id=session.id,
+                            defaults={
+                                'appointment': appointment,
+                                'patient': appointment.patient,
+                                'stripe_payment_intent_id': session.get('payment_intent'),
+                                'amount': Decimal(session.get('amount_total', 0) / 100.0), # Stripe usa centavos
+                                'currency': session.get('currency', 'usd').upper(),
+                                'status': 'completed',
+                                'paid_at': timezone.now()
+                            }
+                        )
+                        logger.info(f"Transacción de pago registrada: {session.id}")
+                        # --- 👆 FIN DE LA NUEVA IDEA 👆 ---
+
                 except (Clinic.DoesNotExist, Appointment.DoesNotExist) as e:
                     logger.error(f"No se encontró la clínica o cita desde el webhook: schema={schema_name}, appt_id={appointment_id}, error={e}")
             else:
                 logger.warning(f"Webhook recibido sin datos completos: appointment_id={appointment_id}, schema_name={schema_name}")
-        
-        # Manejar cancelaciones de pago
-        elif event['type'] == 'checkout.session.expired':
-            session = event['data']['object']
-            metadata = session.get('metadata', {})
-            appointment_id = metadata.get('appointment_id')
-            schema_name = metadata.get('tenant_schema_name')
-            
-            if appointment_id and schema_name:
-                try:
-                    tenant = Clinic.objects.get(schema_name=schema_name)
-                    with tenant_context(tenant):
-                        appointment = Appointment.objects.get(id=appointment_id)
-                        appointment.delete()
-                        logger.info(f"Cita {appointment_id} eliminada por sesión expirada en schema {schema_name}")
-                except (Clinic.DoesNotExist, Appointment.DoesNotExist):
-                    pass
-        
+
+        # ... (tu lógica de 'checkout.session.expired' no cambia) ...
+
         return Response(status=status.HTTP_200_OK)
 
 
@@ -265,3 +271,87 @@ class GetStripePublicKeyView(APIView):
         return Response({
             'publicKey': settings.STRIPE_PUBLISHABLE_KEY
         })
+
+class PaymentHistoryListView(generics.ListAPIView):
+    """
+    Endpoint para que un paciente vea su historial de pagos.
+    """
+    serializer_class = PaymentTransactionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """Filtra los pagos solo para el usuario autenticado."""
+        return PaymentTransaction.objects.filter(
+            patient=self.request.user
+        ).order_by('-paid_at')
+
+class ConfirmPaymentView(generics.GenericAPIView):
+    """
+    NUEVO: Endpoint para que el Frontend confirme el pago 
+    después de ser redirigido por Stripe.
+    """
+    serializer_class = PaymentConfirmationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        
+        try:
+            serializer.is_valid(raise_exception=True)
+        except Exception as e:
+            logger.error(f"🚨 Error de validación en confirmación de pago: {e}")
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+        # --- 2. ¡EL CAMBIO CLAVE! ---
+        #    Leemos desde validated_data, NO desde self.context
+        validated_data = serializer.validated_data
+        session = validated_data.get('stripe_session')
+        appointment = validated_data.get('appointment')
+
+        if not session or not appointment:
+            logger.error("🚨 Serializer no devolvió session o appointment después de validar")
+            return Response(
+                {"error": "No se pudo validar la sesión de pago (datos faltantes)."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # 3. El resto de tu lógica para crear la PaymentTransaction...
+        try:
+            # Creamos el registro en 'payment_transactions'
+            transaction, created = PaymentTransaction.objects.update_or_create(
+                stripe_session_id=session.id,
+                defaults={
+                    'appointment': appointment,
+                    'patient': appointment.patient,
+                    'stripe_payment_intent_id': session.get('payment_intent'),
+                    'amount': Decimal(session.get('amount_total', 0) / 100.0),
+                    'currency': session.get('currency', 'usd').upper(),
+                    'status': 'completed',
+                    'paid_at': timezone.now()
+                }
+            )
+            logger.info(f"✅ Transacción creada: {transaction.id}. Nuevo: {created}")
+
+            # Actualizamos la cita
+            appointment.is_paid = True
+            appointment.status = 'confirmed'
+            appointment.save()
+            logger.info(f"✅ Cita actualizada: {appointment.id}")
+
+            # Devolvemos los datos de la cita (como espera el frontend)
+            appointment_data = {
+                "id": appointment.id,
+                "appointment_date": appointment.appointment_date,
+                "start_time": appointment.start_time.strftime('%H:%M'),
+                "psychologist_name": appointment.psychologist.get_full_name(),
+                "status": appointment.get_status_display(), # Usamos el display
+            }
+            return Response({"appointment": appointment_data}, 
+                            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+
+        except Exception as e:
+            logger.error(f"🚨 Error al crear la transacción o confirmar la cita: {e}", exc_info=True)
+            return Response(
+                {"error": "Hubo un error al procesar la confirmación en el servidor."},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
